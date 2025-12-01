@@ -1,0 +1,59 @@
+---
+title: "ChIP_181207"
+author: "Andrea"
+date: '2022-06-17'
+output: html_document
+---
+
+# align and run macs to get bedgraphs for old data
+# run samples through ChIPseq pipeline
+```{bash}
+# run from align dir
+cd alignment
+
+for fq in /pipeline/Archives/NextSeq/181207_NB501056_0228_AHHTTNBGX9/ProjectFolders/Project_Marian-Burr/Sample_KLY*/*_R1_001.fastq.gz
+do
+sbatch ../scripts/ChIP181207.sbatch $fq
+done
+```
+
+# clean up file names
+```{r}
+project.dir <- "/dawson_genomics/Projects/Menin/ChIPseq_181207_NB501056_0228_AHHTTNBGX9"
+align.dir <- file.path(project.dir, "alignment")
+files <- list.files(align.dir, pattern = "_R1_001.fastq.trim.align")
+setwd(align.dir)
+for(file in files){
+  file.rename(file, gsub("_R1_001.fastq.trim.align", "", file))
+}
+```
+
+# run macs with bdg output
+```{bash}
+cd ..
+
+sbatch scripts/macs2.sbatch alignment/KLY-g-K4me3_S10.HgBLMTfil.sort.rmdup.bam alignment/KLY-g-Input_S18.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-g-K27me3_S14.HgBLMTfil.sort.rmdup.bam alignment/KLY-g-Input_S18.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-g-K27ac_S6.HgBLMTfil.sort.rmdup.bam alignment/KLY-g-Input_S18.HgBLMTfil.sort.rmdup.bam
+
+sbatch scripts/macs2.sbatch alignment/KLY-gEPZ-K4me3_S12.HgBLMTfil.sort.rmdup.bam alignment/KLY-gEPZ-Input_S20.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-gEPZ-K27me3_S16.HgBLMTfil.sort.rmdup.bam alignment/KLY-gEPZ-Input_S20.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-gEPZ-K27ac_S8.HgBLMTfil.sort.rmdup.bam alignment/KLY-gEPZ-Input_S20.HgBLMTfil.sort.rmdup.bam
+
+sbatch scripts/macs2.sbatch alignment/KLY-EPZ-K4me3_S11.HgBLMTfil.sort.rmdup.bam alignment/KLY-EPZ-Input_S19.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-EPZ-K27me3_S15.HgBLMTfil.sort.rmdup.bam alignment/KLY-EPZ-Input_S19.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-EPZ-K27ac_S7.HgBLMTfil.sort.rmdup.bam alignment/KLY-EPZ-Input_S19.HgBLMTfil.sort.rmdup.bam
+
+sbatch scripts/macs2.sbatch alignment/KLY-cont-K4me3_S9.HgBLMTfil.sort.rmdup.bam alignment/KLY-cont-Input_S17.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-cont-K27me3_S13.HgBLMTfil.sort.rmdup.bam alignment/KLY-cont-Input_S17.HgBLMTfil.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/KLY-cont-K27ac_S5.HgBLMTfil.sort.rmdup.bam alignment/KLY-cont-Input_S17.HgBLMTfil.sort.rmdup.bam
+```
+
+# save session info
+```{r}
+sesh.info <- capture.output(sessionInfo())
+writeLines(
+  sesh.info,
+  file.path(project.dir, "session-info", paste0(Sys.Date(), "_ChIP_analysis_181207.txt"))
+)
+```
