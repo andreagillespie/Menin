@@ -1,0 +1,297 @@
+---
+title: "Combine_ChIPseq"
+output: html_document
+---
+
+Additional analysis of 3 previous ChIPseq experiments analysed separately as part of Menin project:
+/dawson_genomics/Projects/Menin/ChIPseq_200320_NB501056_0470_AH5NJJBGXF
+/dawson_genomics/Projects/Menin/ChIPseq_210422_NB501056_0625_AHGNFTBGXJ
+/dawson_genomics/Projects/Menin/ChIPseq_210623_NB501056_0652_AHTHVNBGXJ
+
+
+
+# set and create dirs
+```{r}
+menin.dir <- "/dawson_genomics/Projects/Menin/"
+project.dir <- file.path(menin.dir, "ChIPseq_combined_200320_210422_210623")
+chip.dir.2003 <- file.path(menin.dir, "ChIPseq_200320_NB501056_0470_AH5NJJBGXF")
+chip.dir.2104 <- file.path(menin.dir, "ChIPseq_210422_NB501056_0625_AHGNFTBGXJ")
+chip.dir.2106 <- file.path(menin.dir, "ChIPseq_210623_NB501056_0652_AHTHVNBGXJ")
+logs.dir <- file.path(project.dir, "logs")
+plots.dir <- file.path(project.dir, "plots")
+scripts.dir <- file.path(project.dir, "scripts")
+session.dir <- file.path(project.dir, "session_info")
+dt.dir <- file.path(project.dir, "deeptools")
+sample.dir <- file.path(project.dir, "sample_info")
+
+dir.create(sample.dir)
+dir.create(logs.dir)
+dir.create(plots.dir)
+dir.create(scripts.dir)
+dir.create(session.dir)
+dir.create(dt.dir)
+
+setwd(project.dir)
+```
+
+
+
+heatmaps for select chips at menin genes
+### this block of code submitted with ChIPseq_combined_200320_210422_210623/scripts/DeeptoolsBWMatrix.sbatch
+```{bash}
+module load deeptools/3.0.0
+
+# run from Menin dir
+computeMatrix scale-regions -S ChIPseq_200320_NB501056_0470_AH5NJJBGXF/BW/Cas_S2.bw ChIPseq_200320_NB501056_0470_AH5NJJBGXF/BW/MENi_S3.bw ChIPseq_200320_NB501056_0470_AH5NJJBGXF/BW/MENKO_S4.bw ChIPseq_200320_NB501056_0470_AH5NJJBGXF/BW/LEDGFKO_S5.bw ChIPseq_210422_NB501056_0625_AHGNFTBGXJ/BW/MHC-CS04-K562-3A-DUAL-MLL1_S3.bw ChIPseq_210422_NB501056_0625_AHGNFTBGXJ/BW/MHC-CS04-K562-4A-DUAL-MLL1_S4.bw ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/BW/CS06-CAS-DMSO-MLL1_S7.bw ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/BW/CS06-CAS-VTP-1uM-MLL1_S8.bw ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/BW/CS06-KMT2Bc8-DMSO-MLL1_S9.bw ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/BW/CS06-KMT2Bc8-VTP-1uM-MLL1_S10.bw -R ChIPseq_200320_NB501056_0470_AH5NJJBGXF/scripts/MeninGenesDT.bed -a 3000 -b 3000 -m 5000 -o ChIPseq_combined_200320_210422_210623/deeptools/ChIPmatrix_ChIPcomb_Menin_Genes.gz
+
+plotHeatmap -m ChIPseq_combined_200320_210422_210623/deeptools/ChIPmatrix_ChIPcomb_Menin_Genes.gz --sortUsing sum --boxAroundHeatmaps no --samplesLabel Cas MENi MENKO LEDGFKO 3A-DUAL-MLL1 4A-DUAL-MLL1 CAS-DMSO-MLL1 CAS-VTP-1uM-MLL1 KMT2Bc8-DMSO-MLL1 KMT2Bc8-VTP-1uM-MLL1 --colorMap Reds Reds Reds Reds Blues Blues Greens Greens Greens Greens -o ChIPseq_combined_200320_210422_210623/plots/Heatmap_ChIPcomb_Menin_Genes.pdf --plotTitle "ChIPseq Menin genes"
+
+```
+
+# peaks calls not present for MLL1 chips so run macs from respective dirs
+```{bash}
+# run from original chip dirs
+cd ../ChIPseq_210422_NB501056_0625_AHGNFTBGXJ
+
+sbatch scripts/macs2.sbatch bam/MHC-CS04-K562-3A-DUAL-MLL1_S3.bam bam/MHC-CS04-K562-1-INPUT1_S1.bam
+sbatch scripts/macs2.sbatch bam/MHC-CS04-K562-4A-DUAL-MLL1_S4.bam bam/MHC-CS04-K562-3-INPUT3_S2.bam
+
+cd ../ChIPseq_210623_NB501056_0652_AHTHVNBGXJ
+sbatch scripts/macs2.sbatch bam/CS06-CAS-DMSO-MLL1_S7.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+sbatch scripts/macs2.sbatch bam/CS06-CAS-VTP-1uM-MLL1_S8.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+sbatch scripts/macs2.sbatch bam/CS06-KMT2Bc8-DMSO-MLL1_S9.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+sbatch scripts/macs2.sbatch bam/CS06-KMT2Bc8-VTP-1uM-MLL1_S10.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+```
+
+# use diffbind on MLL1 chips to get diff peaks, make table of LFC for each, and annotate
+```{r}
+library(DiffBind)
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+library(GenomicRanges)
+# set and make dir
+db.dir <- file.path(project.dir, "diffbind")
+dir.create(db.dir)
+
+# read in diffbind stylized sample sheet
+samples <- read.csv(file.path(sample.dir, 'diffbind_sample_sheet.csv'), stringsAsFactors = FALSE)
+# make db object from sample sheet
+db.samples <- dba(sampleSheet=samples)
+# add sample names to db object
+db.samples$class[1,] <- samples$ID
+
+# make heatmap from all samples
+pdf(file.path(db.dir, 'diffbind_all_samples_raw_heatmap.pdf'))
+	plot(db.samples)
+dev.off()
+
+# count reads and calculate affinity scores
+db.counts <- dba.count(db.samples, bUseSummarizeOverlaps=TRUE)
+# add names to peaks list
+names(db.counts$peaks) <- samples$ID
+# check counts summary
+db.counts
+6 Samples, 11887 sites in matrix:
+                             ID Tissue Factor Condition Treatment Replicate    Reads FRiP
+1 MHC-CS04-K562-3A-DUAL-MLL1_S3   K562   MLL1       Cas      DUAL         1 24420997 0.02
+2 MHC-CS04-K562-4A-DUAL-MLL1_S4   K562   MLL1    MEN1KO      DUAL         1 17441508 0.01
+3         CS06-CAS-DMSO-MLL1_S7   K562   MLL1       Cas      DMSO         1 24473974 0.02
+4      CS06-CAS-VTP-1uM-MLL1_S8   K562   MLL1       Cas       VTP         1 22313784 0.02
+5     CS06-KMT2Bc8-DMSO-MLL1_S9   K562   MLL1   KMT2Bc8      DMSO         1 24937515 0.01
+6 CS06-KMT2Bc8-VTP-1uM-MLL1_S10   K562   MLL1   KMT2Bc8       VTP         1 22082873 0.02
+
+# make heatmap with affinity (counts scores)
+pdf(file.path(db.dir, 'diffbind_all_samples_affinity_heatmap.pdf'))
+	plot(db.counts)
+dev.off()
+
+# get annotation object
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+
+# set desired comparisons
+comps <- list(
+	'MEN1KOvCas' = c('MHC-CS04-K562-3A-DUAL-MLL1_S3', 'MHC-CS04-K562-4A-DUAL-MLL1_S4'),
+	'VTPvDMSO_Cas' = c('CS06-CAS-DMSO-MLL1_S7', 'CS06-CAS-VTP-1uM-MLL1_S8'),
+	'VTPvDMSO_KMT2Bc8' = c('CS06-KMT2Bc8-DMSO-MLL1_S9', 'CS06-KMT2Bc8-VTP-1uM-MLL1_S10'),
+	'KMT2Bc8vCas_DMSO' = c('CS06-CAS-DMSO-MLL1_S7', 'CS06-KMT2Bc8-DMSO-MLL1_S9')
+)
+
+# get lfc peaks table for each comparison
+for(comp.i in 1:length(comps)){
+
+	# get each comparison to specify peaks matrix
+	comp.x <- comps[[comp.i]][1]
+	comp.y <- comps[[comp.i]][2]
+
+	# ensure peak in both samples 
+	comp.table <- merge(
+		db.counts$peaks[[comp.x]], 
+		db.counts$peaks[[comp.y]], 
+		by.x = c('Chr', 'Start', 'End'),
+		by.y = c('Chr', 'Start', 'End')
+		)
+
+	# get fold change between specified samples
+	comp.fc <- log2(comp.table$RPKM.y/comp.table$RPKM.x)
+	comp.fc.table <- cbind(comp.table[1:3], comp.fc)
+	
+	# make genomic ranges object for annotation
+	gr.fc.table <- with(comp.fc.table, GRanges(Chr, IRanges(start=Start, end=End)))
+	gr.fc.table$LFC <- comp.fc.table$comp.fc
+	seqlevelsStyle(gr.fc.table) <- "UCSC"
+	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+	lfc.ann.table <- as.data.frame(lfc.ann)
+
+	write.table(
+		lfc.ann.table,
+		file.path(db.dir, paste0(names(comps[comp.i]), '_diff_peaks_LFC_table.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+	
+	# subset for menin genes and write out
+	menin <- read.table(file.path(chip.dir.2003, "scripts/MeninGenes.bed"))
+	menin.lfc.ann.table <- subset(lfc.ann.table, ENSEMBL %in% menin$V4)
+	write.table(
+		menin.lfc.ann.table,
+		file.path(db.dir, paste0(names(comps[comp.i]), '_Menin_diff_peaks_LFC_table.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+}
+
+```
+
+# diffbind results are all peaks, not separated for sig diff, so lots to pick through, but could sort by LFC. Also try bdgdiff from macs
+# first need pileup and lambda bdg, so run macs with additional output
+```{bash}
+# run from original chip dirs
+cd ../ChIPseq_210422_NB501056_0625_AHGNFTBGXJ
+
+sbatch ../ChIPseq_combined_200320_210422_210623/scripts/macs2.sbatch bam/MHC-CS04-K562-3A-DUAL-MLL1_S3.bam bam/MHC-CS04-K562-1-INPUT1_S1.bam
+sbatch ../ChIPseq_combined_200320_210422_210623/scripts/macs2.sbatch bam/MHC-CS04-K562-4A-DUAL-MLL1_S4.bam bam/MHC-CS04-K562-3-INPUT3_S2.bam
+
+cd ../ChIPseq_210623_NB501056_0652_AHTHVNBGXJ
+sbatch ../ChIPseq_combined_200320_210422_210623/scripts/macs2.sbatch bam/CS06-CAS-DMSO-MLL1_S7.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+sbatch ../ChIPseq_combined_200320_210422_210623/scripts/macs2.sbatch bam/CS06-CAS-VTP-1uM-MLL1_S8.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+sbatch ../ChIPseq_combined_200320_210422_210623/scripts/macs2.sbatch bam/CS06-KMT2Bc8-DMSO-MLL1_S9.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+sbatch ../ChIPseq_combined_200320_210422_210623/scripts/macs2.sbatch bam/CS06-KMT2Bc8-VTP-1uM-MLL1_S10.bam bam/CS06-CAS-DMSO-INPUT1_S6.bam
+```
+
+```{bash}
+# mkdir for output in comb dir, thenrun from respective chip narrow peaks dirs, set output to comb project dir
+module load macs
+mkdir macs
+
+# d1/d2 are 'tags after filtering in control' (from peak calling output spreadsheet)
+cd ../ChIPseq_210422_NB501056_0625_AHGNFTBGXJ/narrowpeaks
+
+egrep "tags after filtering in control" MHC-CS04-K562-4A-DUAL-MLL1_S4_peaks.xls
+# tags after filtering in control: 18965573
+egrep "tags after filtering in control" MHC-CS04-K562-3A-DUAL-MLL1_S3_peaks.xls
+# tags after filtering in control: 18625076
+macs2 bdgdiff --t1 MHC-CS04-K562-4A-DUAL-MLL1_S4_treat_pileup.bdg --c1 MHC-CS04-K562-4A-DUAL-MLL1_S4_control_lambda.bdg --t2 MHC-CS04-K562-3A-DUAL-MLL1_S3_treat_pileup.bdg --c2 MHC-CS04-K562-3A-DUAL-MLL1_S3_control_lambda.bdg --d1 18965573 --d2 18625076 --o-prefix diff_MEN1KOvCas_MLL1 --outdir ../../ChIPseq_combined_200320_210422_210623/macs
+
+cd ../../ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/narrowpeaks
+
+egrep "tags after filtering in control" CS06-CAS-VTP-1uM-MLL1_S8_peaks.xls
+# tags after filtering in control: 23188490
+egrep "tags after filtering in control" CS06-CAS-DMSO-MLL1_S7_peaks.xls
+# tags after filtering in control: 23188490
+# same input control for these experiments, so same d1/d2 for all, no depth adj will be made but will include for consistency/clarity
+macs2 bdgdiff --t1 CS06-CAS-VTP-1uM-MLL1_S8_treat_pileup.bdg --c1 CS06-CAS-VTP-1uM-MLL1_S8_control_lambda.bdg --t2 CS06-CAS-DMSO-MLL1_S7_treat_pileup.bdg --c2 CS06-CAS-DMSO-MLL1_S7_control_lambda.bdg --d1 23188490 --d2 23188490 --o-prefix diff_VTPvDMSO_Cas_MLL1 --outdir ../../ChIPseq_combined_200320_210422_210623/macs
+
+macs2 bdgdiff --t1 CS06-KMT2Bc8-VTP-1uM-MLL1_S10_treat_pileup.bdg --c1 CS06-KMT2Bc8-VTP-1uM-MLL1_S10_control_lambda.bdg --t2 CS06-KMT2Bc8-DMSO-MLL1_S9_treat_pileup.bdg --c2 CS06-KMT2Bc8-DMSO-MLL1_S9_control_lambda.bdg --d1 23188490 --d2 23188490 --o-prefix diff_VTPvDMSO_KMT2Bc8_MLL1 --outdir ../../ChIPseq_combined_200320_210422_210623/macs
+
+macs2 bdgdiff --t1 CS06-KMT2Bc8-DMSO-MLL1_S9_treat_pileup.bdg --c1 CS06-KMT2Bc8-DMSO-MLL1_S9_control_lambda.bdg --t2 CS06-CAS-DMSO-MLL1_S7_treat_pileup.bdg --c2 CS06-CAS-DMSO-MLL1_S7_control_lambda.bdg --d1 23188490 --d2 23188490 --o-prefix diff_KMT2Bc8vCas_DMSO_MLL1 --outdir ../../ChIPseq_combined_200320_210422_210623/macs
+```
+
+# annotate diff peaks files and subset for menin genes only
+```{r}
+library(data.table)
+# set to macs dir
+macs.dir <- file.path(project.dir, "macs")
+setwd(macs.dir)
+# set conditions for file names
+conds <- c("common", "cond1", "cond2")
+
+for(comp.i in 1:length(comps)){
+  for(cond.j in 1:3){
+    # read in each file to annotate, rewrite, subset and write
+    diff.table <- fread(paste0("diff_", names(comps)[comp.i], "_MLL1_c3.0_", conds[cond.j], ".bed"), skip = 1)
+  	# make genomic ranges object for annotation
+  	gr.diff <- with(diff.table, GRanges(V1, IRanges(start=V2, end=V3)))
+  	gr.diff$logLikelihood <- diff.table$V5
+  	seqlevelsStyle(gr.diff) <- "UCSC"
+  	diff.ann <- annotatePeak(gr.diff, TxDb = txdb, annoDb = "org.Hs.eg.db")
+  	diff.ann.table <- as.data.frame(diff.ann)
+  
+  	write.table(
+  		diff.ann.table,
+  		file.path(macs.dir, paste0("diff_", names(comps)[comp.i], "_MLL1_c3.0_", conds[cond.j], ".bed")),
+  		sep = '\t',
+  		col.names = TRUE,
+  		row.names = FALSE,
+  		quote = FALSE
+  		)
+  	
+  	# subset for menin genes and write out
+  	menin.diff.ann.table <- subset(diff.ann.table, ENSEMBL %in% menin$V4)
+  	write.table(
+  		menin.diff.ann.table,
+  		file.path(macs.dir, paste0("diff_MENINonly_", names(comps)[comp.i], "_MLL1_c3.0_", conds[cond.j], ".bed")),
+  		sep = '\t',
+  		col.names = TRUE,
+  		row.names = FALSE,
+  		quote = FALSE
+		  )
+  }
+}
+```
+
+# boxplot of menin vs not and bivalent vs not for each comparison
+```{r}
+# make dir for boxplots
+dir.create(file.path(plots.dir, "boxplots"))
+
+# read in K562 bivalent gene
+bivalent <- scan(file.path(sample.dir, "K562_bivalent_genes.txt"), what = "character", skip = 1)
+
+for(comp.i in 1:length(names(comps))){
+  lfc.table <- fread(file.path(db.dir, paste0(names(comps)[comp.i], "_diff_peaks_LFC_table.txt")))
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent),]
+  pdf(file.path(plots.dir, "boxplots", paste0(names(comps)[comp.i], "_menin_bivalent_boxplot.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(names(comps)[comp.i], " MLL1 binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    ylim = c(-2.5, 2.5),
+    notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+```
+
+# save session info
+```{r}
+sesh.info <- capture.output(sessionInfo())
+writeLines(
+  sesh.info,
+  file.path(project.dir, "session_info", paste0(Sys.Date(), "_combine_ChIPseq_analysis.txt"))
+)
+```
