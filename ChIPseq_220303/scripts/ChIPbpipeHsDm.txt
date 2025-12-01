@@ -1,0 +1,41 @@
+trim = {
+	exec "cutadapt -a AGATCGGAAGAGC -o $output.gz $input"
+}
+
+REFERENCE = "/data/reference/dawson_labs/joint_genomes/Hg19Dm3/Hg19Dm3.dna.toplevel"
+
+align = {
+	exec "bwa mem -t 8 $REFERENCE $input.gz > $output.sam"
+}
+
+HgBLMTfil = {
+	exec "samtools view -b -L /data/reference/dawson_labs/whitelists/Hg19Whitelist.bed -q 10 -o $output.bam $input.sam"
+}
+
+DmBLMTfil = {
+	exec "samtools view -b -L /data/reference/dawson_labs/whitelists/Dm3Whitelist.bed -q 10 -o $output.bam $input.sam"
+}
+
+sort = {
+	exec "samtools sort -o $output.bam $input.bam"
+}
+
+rmdup = {
+	exec "samtools rmdup -s $input.bam $output.bam"
+}
+
+index = {
+	exec "samtools index $input.bam"
+}
+
+Hgtdf = {
+	exec "igvtools count $input.bam $output.tdf hg19"
+}
+
+Dmtdf = {
+	exec "igvtools count $input.bam $output.tdf dm3"
+}
+
+Bpipe.run {
+	trim + align + [ HgBLMTfil + sort + rmdup + index + Hgtdf , DmBLMTfil + sort + rmdup + index + Dmtdf]
+}
