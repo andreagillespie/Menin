@@ -1,0 +1,456 @@
+---
+title: "CnR_211109"
+output: html_notebook
+---
+
+Loation of sequencing files:
+ /pipeline/Runs/NextSeq/211109_NB501056_0714_AHW5VWBGXK/ProjectFolders/Project_Christina-Sparbier/Sample_MHC-CSCR01-K562-*
+
+# set and create dirs
+```{r}
+project.dir <- "/dawson_genomics/Projects/Menin/CUTandRUN_211109_NB501056_0714_AHW5VWBGXK"
+align.dir <- file.path(project.dir, "alignment")
+results.dir <- file.path(project.dir, "results")
+logs.dir <- file.path(project.dir, "logs")
+plots.dir <- file.path(project.dir, "plots")
+sample.dir <- file.path(project.dir, "sample_info")
+scripts.dir <- file.path(project.dir, "scripts")
+session.dir <- file.path(project.dir, "session_info")
+
+dir.create(align.dir)
+dir.create(logs.dir)
+dir.create(plots.dir)
+dir.create(results.dir)
+dir.create(sample.dir)
+dir.create(scripts.dir)
+dir.create(session.dir)
+
+setwd(project.dir)
+```
+
+
+# fastqc
+```{bash}
+mkdir fastqc
+module load fastqc/0.11.6
+
+for fq in /pipeline/Runs/NextSeq/211109_NB501056_0714_AHW5VWBGXK/ProjectFolders/Project_Christina-Sparbier/Sample_MHC-CSCR01-K562-*/*_001.fastq.gz
+do
+sbatch scripts/fastqc.sbatch $fq
+done
+
+cd fastqc
+module load multiqc/1.8 
+multiqc .
+```
+
+# run samples through ChIPseq pipeline
+
+```{bash}
+# run from align dir
+cd ../alignment
+
+for fq in /pipeline/Runs/NextSeq/211109_NB501056_0714_AHW5VWBGXK/ProjectFolders/Project_Christina-Sparbier/Sample_MHC-CSCR01-K562-*/*_R1_001.fastq.gz
+do
+sbatch ../scripts/CnR211109.sbatch $fq
+done
+```
+
+# qc on trimmed fastqs
+```{bash}
+# run from project dir
+cd /dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK
+mkdir fastqc/trimmed
+
+for fq in alignment/*fastq.tri*.gz
+do
+sbatch scripts/fastqc.sbatch $fq
+done
+
+cd fastqc/trimmed
+multiqc .
+```
+
+# clean up file names
+```{r}
+files <- list.files(align.dir, pattern = "_R1_001.fastq.trim.align")
+setwd(align.dir)
+for(file in files){
+  file.rename(file, gsub("_R1_001.fastq.trim.align", "", file))
+}
+setwd(project.dir)
+```
+
+# implement cut&run tools
+```{bash}
+# make a working dir for cnrtools and run from there (set to work dir in config)
+mkdir toolswd
+
+# make cutandruntools dir and config for project
+mkdir cutandruntools
+
+# run validation and create scripts from cutandruntools dir first (scripts for tools in prev proj dir)
+cd cutandruntools
+/dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK/cutandruntools/validate.py config.json
+
+### termina output MHC-CSCR01-K562-CAS-MLL1_S11_R1_001.fastq.gz does not have a corresponding _R2_001.fastq.gz file
+
+##### appears cutandruntools required paired end input #####
+#/dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK/cutandruntools/create_scripts.py config.json
+
+
+## run first step then make TDFs for comparison to see if there is a noticeable difference
+#cd ../toolswd
+#for fq in ../fastq/*_R1_001.fastq.gz
+#do
+#sbatch /dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK/cutandruntools/integrated.sh $fq
+#done
+```
+
+# continue with chip pipeline output
+# get flagstats from Dm bams for norm factor
+samtools flagstat MHC-CSCR01-K562-CAS-H3K27me3_S15.DmBLMTfil.sort.rmdup.bam
+163489 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-IgG_S9.DmBLMTfil.sort.rmdup.bam
+219178 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-MLL1_S11.DmBLMTfil.sort.rmdup.bam
+95117 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-RNAPII_S17.DmBLMTfil.sort.rmdup.bam
+64187 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-SUZ12_S13.DmBLMTfil.sort.rmdup.bam
+268308 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S16.DmBLMTfil.sort.rmdup.bam
+76236 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-IgG_S10.DmBLMTfil.sort.rmdup.bam
+103303 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-MLL1_S12.DmBLMTfil.sort.rmdup.bam
+65223 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S18.DmBLMTfil.sort.rmdup.bam
+326476 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S14.DmBLMTfil.sort.rmdup.bam
+192391 + 0 in total (QC-passed reads + QC-failed reads)
+
+# calculate nornmalisation CAS/MEN1c4_KO
+H3K27me3: 163489/76236 = 2.144512
+MLL1: 95117/65223 = 1.458335
+RNAPII: 64187/326476 = 0.1966056
+SUZ12: 268308/192391 = 1.394597
+
+# normalise and make BWs
+```{bash}
+# run from align dir
+cd alignment
+mkdir NormBW
+mkdir BW
+
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S16.HgBLMTfil.sort.rmdup.bam 2.144512
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-MEN1c4-KO-MLL1_S12.HgBLMTfil.sort.rmdup.bam 1.458335
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S18.HgBLMTfil.sort.rmdup.bam 0.1966056
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S14.HgBLMTfil.sort.rmdup.bam 1.394597
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-CAS-H3K27me3_S15.HgBLMTfil.sort.rmdup.bam 1
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-CAS-MLL1_S11.HgBLMTfil.sort.rmdup.bam 1
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-CAS-RNAPII_S17.HgBLMTfil.sort.rmdup.bam 1
+sbatch ../scripts/DeeptoolsBamCov.sbatch MHC-CSCR01-K562-CAS-SUZ12_S13.HgBLMTfil.sort.rmdup.bam 1
+```
+
+# get reads for Hg total and dedup
+samtools flagstat MHC-CSCR01-K562-CAS-H3K27me3_S15.HgBLMTfil.sort.bam
+5697629 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-IgG_S9.HgBLMTfil.sort.bam
+4303967 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-MLL1_S11.HgBLMTfil.sort.bam
+3731117 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-RNAPII_S17.HgBLMTfil.sort.bam
+5395575 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-SUZ12_S13.HgBLMTfil.sort.bam
+4504258 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S16.HgBLMTfil.sort.bam
+5084676 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-IgG_S10.HgBLMTfil.sort.bam
+3966308 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-MLL1_S12.HgBLMTfil.sort.bam
+5064240 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S18.HgBLMTfil.sort.bam
+7028128 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S14.HgBLMTfil.sort.bam
+6173330 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-H3K27me3_S15.HgBLMTfil.sort.rmdup.bam
+5496585 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-IgG_S9.HgBLMTfil.sort.rmdup.bam
+4166790 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-MLL1_S11.HgBLMTfil.sort.rmdup.bam
+3642130 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-RNAPII_S17.HgBLMTfil.sort.rmdup.bam
+5241802 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-SUZ12_S13.HgBLMTfil.sort.rmdup.bam
+4357706 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S16.HgBLMTfil.sort.rmdup.bam
+4962052 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-IgG_S10.HgBLMTfil.sort.rmdup.bam
+3777530 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-MLL1_S12.HgBLMTfil.sort.rmdup.bam
+4929105 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S18.HgBLMTfil.sort.rmdup.bam
+6813844 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S14.HgBLMTfil.sort.rmdup.bam
+5988661 + 0 in total (QC-passed reads + QC-failed reads)
+
+# get Dm total reads as well to make stats table for Christina
+samtools flagstat MHC-CSCR01-K562-CAS-H3K27me3_S15.DmBLMTfil.sort.bam
+167842 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-IgG_S9.DmBLMTfil.sort.bam
+226760 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-MLL1_S11.DmBLMTfil.sort.bam
+96988 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-RNAPII_S17.DmBLMTfil.sort.bam
+65361 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-CAS-SUZ12_S13.DmBLMTfil.sort.bam
+279999 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S16.DmBLMTfil.sort.bam
+77835 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-IgG_S10.DmBLMTfil.sort.bam
+105451 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-MLL1_S12.DmBLMTfil.sort.bam
+66383 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S18.DmBLMTfil.sort.bam
+339087 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S14.DmBLMTfil.sort.bam
+198296 + 0 in total (QC-passed reads + QC-failed reads)
+
+##### compiled into bamstats table aligned_reads_stats.txt #####
+
+# also do multiqc of aligned dir
+```{bash}
+module load multiqc/1.8
+multiqc .
+```
+
+profiles and heatmaps at menin genes
+```{bash}
+module load deeptools/3.0.0
+
+# run from alignment dir
+# computeMatrix submitted with DeeptoolsBWMatrix.sbatch
+computeMatrix scale-regions -S NormBW/MHC-CSCR01-K562-CAS-H3K27me3_S15.bw NormBW/MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S16.bw NormBW/MHC-CSCR01-K562-CAS-MLL1_S11.bw NormBW/MHC-CSCR01-K562-MEN1c4-KO-MLL1_S12.bw NormBW/MHC-CSCR01-K562-CAS-RNAPII_S17.bw NormBW/MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S18.bw NormBW/MHC-CSCR01-K562-CAS-SUZ12_S13.bw NormBW/MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S14.bw -R /dawson_genomics/Projects/Menin/ChIPseq_200320_NB501056_0470_AH5NJJBGXF/scripts/MeninGenes.bed -a 3000 -b 3000 -m 5000 -o CnRmatrix_CUTandRUN_Norm_Menin_Genes.gz
+
+plotProfile -m CnRmatrix_CUTandRUN_Norm_Menin_Genes.gz --perGroup --samplesLabel CAS-H3K27me3 MEN1c4-KO-H3K27me3 CAS-MLL1 MEN1c4-KO-MLL1 CAS-RNAPII MEN1c4-KO-RNAPII CAS-SUZ12 MEN1c4-KO-SUZ12 -o ../plots/Profile_CnR_Norm_Menin_Genes.pdf --plotTitle "K562 Cut&Run Menin"
+
+plotHeatmap -m CnRmatrix_CUTandRUN_Norm_Menin_Genes.gz --sortUsing sum --boxAroundHeatmaps no --samplesLabel CAS-H3K27me3 MEN1c4-KO-H3K27me3 CAS-MLL1 MEN1c4-KO-MLL1 CAS-RNAPII MEN1c4-KO-RNAPII CAS-SUZ12 MEN1c4-KO-SUZ12 --colorMap Reds Reds Blues Blues Greens Greens Purples Purples -o ../plots/Heatmap_CnR_Norm_Menin_Genes.pdf --plotTitle "K562 Cut&Run Menin genes"
+
+```
+
+# run macs to get bdg files
+```{bash}
+sbatch scripts/macs2.sbatch alignment/MHC-CSCR01-K562-MEN1c4-KO-MLL1_S12.HgBLMTfil.sort.bam alignment/MHC-CSCR01-K562-MEN1c4-KO-IgG_S10.HgBLMTfil.sort.bam
+
+sbatch scripts/macs2.sbatch alignment/MHC-CSCR01-K562-CAS-MLL1_S11.HgBLMTfil.sort.bam alignment/MHC-CSCR01-K562-CAS-IgG_S9.HgBLMTfil.sort.bam
+```
+
+
+
+
+
+
+# save session info
+```{r}
+sesh.info <- capture.output(sessionInfo())
+writeLines(
+  sesh.info,
+  file.path(project.dir, "session_info", paste0(Sys.Date(), "_CnR_analysis_2110.txt"))
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{bash}
+for bam in HgBam/*.bam; do sbatch scripts/macs2.sbatch $bam; done
+sbatch scripts/ProfileH3K14ac.sbatch
+sbatch scripts/ProfileH3K23ac.sbatch
+```
+
+```{r}
+for bam in HgBam/*.bam
+do
+sbatch scripts/bedops.sbatch $bam
+done
+```
+
+Read counts in genes
+```{r}
+library(dplyr)
+
+counts <- read.table("RegionCounts/LM2-MCF-7-IgG_S21_genes.count", sep="|", header=F)
+
+temp = list.files(path="RegionCounts/",pattern="._genes.count$")
+pathtemp<-paste("RegionCounts/",temp,sep="")
+countsfiles = lapply(pathtemp, read.table,header=F,sep="|")
+
+CombinedCounts <- counts[,1, drop=F]
+for (i in 1:length(countsfiles)){
+  CombinedCounts<-inner_join(CombinedCounts,countsfiles[[i]],by=c("V1"="V1"))
+}
+colnames(CombinedCounts)=c("bed", "LM1-Brpf1-ko-H3K14ac", "LM1-Brpf1-ko-H3K23ac", "LM1-Brpf1-ko-H3K27me3", "LM1-Brpf1-ko-IgG", "LM1-MCF-7-H3K14ac", "LM1-MCF-7-H3K23ac", "LM1-MCF-7-H3K27me3", "LM1-MCF-7-IgG", "LM2-Brpf1-ko-H3K14ac", "LM2-Brpf1-ko-H3K23ac", "LM2-Brpf1-ko-H3K27me3", "LM2-Brpf1-ko-IgG", "LM2-MCF-7-H3K14ac", "LM2-MCF-7-H3K23ac", "LM2-MCF-7-H3K27me3", "LM2-MCF-7-IgG")
+colSums(CombinedCounts[,2:17])
+```
+
+ LM1-Brpf1-ko-H3K14ac  LM1-Brpf1-ko-H3K23ac LM1-Brpf1-ko-H3K27me3      LM1-Brpf1-ko-IgG     LM1-MCF-7-H3K14ac 
+              6620490               7605277              11104981               4141538               4899752 
+    LM1-MCF-7-H3K23ac    LM1-MCF-7-H3K27me3         LM1-MCF-7-IgG  LM2-Brpf1-ko-H3K14ac  LM2-Brpf1-ko-H3K23ac 
+              9436059              10640737               5115522              15373161               9189530 
+LM2-Brpf1-ko-H3K27me3      LM2-Brpf1-ko-IgG     LM2-MCF-7-H3K14ac     LM2-MCF-7-H3K23ac    LM2-MCF-7-H3K27me3 
+             13014617               1801672              11552050              10700270              14049143 
+        LM2-MCF-7-IgG 
+              4043871 
+              
+Read counts in TSS1kb
+```{r}
+temp = list.files(path="RegionCounts/",pattern="._TSS1kb.count$")
+pathtemp<-paste("RegionCounts/",temp,sep="")
+TSScountsfiles = lapply(pathtemp, read.table,header=F,sep="|")
+
+TSSCombinedCounts <- TSScountsfiles[[1]][,1, drop=F]
+for (i in 1:length(TSScountsfiles)){
+  TSSCombinedCounts<-inner_join(TSSCombinedCounts,TSScountsfiles[[i]],by=c("V1"="V1"))
+}
+colnames(TSSCombinedCounts)=c("bed", "LM1-Brpf1-ko-H3K14ac", "LM1-Brpf1-ko-H3K23ac", "LM1-Brpf1-ko-H3K27me3", "LM1-Brpf1-ko-IgG", "LM1-MCF-7-H3K14ac", "LM1-MCF-7-H3K23ac", "LM1-MCF-7-H3K27me3", "LM1-MCF-7-IgG", "LM2-Brpf1-ko-H3K14ac", "LM2-Brpf1-ko-H3K23ac", "LM2-Brpf1-ko-H3K27me3", "LM2-Brpf1-ko-IgG", "LM2-MCF-7-H3K14ac", "LM2-MCF-7-H3K23ac", "LM2-MCF-7-H3K27me3", "LM2-MCF-7-IgG")
+colSums(TSSCombinedCounts[,2:17])
+```
+
+ LM1-Brpf1-ko-H3K14ac  LM1-Brpf1-ko-H3K23ac LM1-Brpf1-ko-H3K27me3      LM1-Brpf1-ko-IgG     LM1-MCF-7-H3K14ac 
+               427683                577523                815150                279637                271409 
+    LM1-MCF-7-H3K23ac    LM1-MCF-7-H3K27me3         LM1-MCF-7-IgG  LM2-Brpf1-ko-H3K14ac  LM2-Brpf1-ko-H3K23ac 
+               512350                646556                326228                902208                715383 
+LM2-Brpf1-ko-H3K27me3      LM2-Brpf1-ko-IgG     LM2-MCF-7-H3K14ac     LM2-MCF-7-H3K23ac    LM2-MCF-7-H3K27me3 
+               970546                154491                648901                641612                882916 
+        LM2-MCF-7-IgG 
+               323270
+
+ZR and K562 samples
+```{r}
+temp1 = list.files(path="RegionCounts/",pattern=".*ZR.*_genes.count")
+temp2 = list.files(path="RegionCounts/",pattern=".*K562.*_genes.count")
+
+
+pathtemp<-paste("RegionCounts/",c(temp1,temp2),sep="")
+countsfiles = lapply(pathtemp, read.table,header=F,sep="|")
+
+CombinedCounts <- countsfiles[[1]][,1, drop=F]
+for (i in 1:length(countsfiles)){
+  CombinedCounts<-inner_join(CombinedCounts,countsfiles[[i]],by=c("V1"="V1"))
+}
+colnames(CombinedCounts)=c("bed", "LM1-ZR-75-1-IgG", "LM10-ZR-75-1-H3K14ac", "LM11-ZR-75-1-H3K23ac", "LM12-ZR-75-1-H3K27me3", "LM2-ZR-75-1-H3K14ac", "LM3-ZR-75-1-H3K23ac", "LM4-ZR-75-1-H3K27me3", "LM9-ZR-75-1-IgG", "LM5-K562-IgG", "LM6-K562-H3K27me3", "LM7-K562-H3K4me3", "LM8-K562-H3K23ac")
+colSums(CombinedCounts[,2:13])
+```
+
+```{r}
+temp1 = list.files(path="RegionCounts/",pattern=".*ZR.*_TSS1kb.count")
+temp2 = list.files(path="RegionCounts/",pattern=".*K562.*_TSS1kb.count")
+
+
+pathtemp<-paste("RegionCounts/",c(temp1,temp2),sep="")
+countsfiles = lapply(pathtemp, read.table,header=F,sep="|")
+
+CombinedCounts <- countsfiles[[1]][,1, drop=F]
+for (i in 1:length(countsfiles)){
+  CombinedCounts<-inner_join(CombinedCounts,countsfiles[[i]],by=c("V1"="V1"))
+}
+colnames(CombinedCounts)=c("bed", "LM1-ZR-75-1-IgG", "LM10-ZR-75-1-H3K14ac", "LM11-ZR-75-1-H3K23ac", "LM12-ZR-75-1-H3K27me3", "LM2-ZR-75-1-H3K14ac", "LM3-ZR-75-1-H3K23ac", "LM4-ZR-75-1-H3K27me3", "LM9-ZR-75-1-IgG", "LM5-K562-IgG", "LM6-K562-H3K27me3", "LM7-K562-H3K4me3", "LM8-K562-H3K23ac")
+colSums(CombinedCounts[,2:13])
+```
+             
+```{bash}
+#add 'chr' to chromosome number
+
+awk '{print "chr"$0}' HgBam/LM2-Brpf1-ko-IgG_S25.bed > HgBam/LM2-Brpf1-ko-IgG_chr.bed
+
+for bed in HgBam/*_S2_chr.bed
+do
+sbatch scripts/homer.sbatch HgBam/LM2-ZR-75-1-H3K14ac_S2_chr.bed
+done
+
+
+```
+
+Read homer annotation stats files in and combine to plot
+```{r}
+temp = list.files(path="Homer/",pattern=".stats")
+pathtemp<-paste("Homer/",temp,sep="")
+statsfiles = lapply(pathtemp, read.delim,skip=13)
+
+
+Anno <- statsfiles[[1]][,1, drop=F]
+for (i in 1:length(statsfiles)){
+  Anno<-inner_join(Anno,statsfiles[[i]][,1:2],by=c("Annotation"="Annotation"))
+}
+colnames(Anno) <- c("Annotation",temp)
+colnames(Anno) <- gsub("_S.*stats$","",colnames(Anno))
+```
+
+```{r}
+ShortAnno <- Anno[Anno$Annotation %in% c("3UTR", "5UTR", "Exon", "Intron","Intergenic", "Promoter"),]
+PropAnno <- sweep(ShortAnno[,2:29],2,colSums(ShortAnno[,2:29]),'/')*100
+PropAnno$Annotation <- ShortAnno$Annotation
+AnnoPlot <- PropAnno[c(1,2,5,6),]
+
+AnnoPlotLong <- melt(AnnoPlot, id.vars = "Annotation")
+
+pdf("GenomeAnnotationReads.pdf", width=10, height=6)
+ggplot(AnnoPlotLong, aes(fill=Annotation, y=value, x=variable)) + ylab("% of reads") + geom_bar(position="stack", stat="identity") + theme_bw() +theme(axis.text.x  = element_text(angle=90, vjust=0.5))
+dev.off()
+```
+
