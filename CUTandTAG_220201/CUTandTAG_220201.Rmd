@@ -1,0 +1,2472 @@
+---
+title: "CUTandTAG_220201"
+output: html_document
+---
+
+Project location:
+/dawson_genomics/Projects/Menin/CUTandTAG_220201_NB501056_0753_AHLHYCBGXL
+
+FASTQ location:
+/pipeline/Runs/NextSeq/220201_NB501056_0753_AHLHYCBGXL/ProjectFolders/Project_Christina-Sparbier
+
+# set and create dirs
+```{r}
+project.dir <- "/dawson_genomics/Projects/Menin/CUTandTAG_220201_NB501056_0753_AHLHYCBGXL"
+log.dir <- file.path(project.dir, "logs")
+align.dir <- file.path(project.dir, "alignment")
+plots.dir <- file.path(project.dir, "plots")
+scripts.dir <- file.path(project.dir, "scripts")
+sample.dir <- file.path(project.dir, "sample_info")
+session.dir <- file.path(project.dir, "session_info")
+
+dir.create(log.dir)
+dir.create(align.dir)
+dir.create(plots.dir)
+dir.create(sample.dir)
+dir.create(scripts.dir)
+dir.create(session.dir)
+setwd(project.dir)
+```
+
+# run from alignment dir
+```{bash}
+cd /dawson_genomics/Projects/Menin/CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment
+for fq in /pipeline/Runs/NextSeq/220201_NB501056_0753_AHLHYCBGXL/ProjectFolders/Project_Christina-Sparbier/*/*_R1_001.fastq.gz
+do
+bname=`basename $fq _R1_001.fastq.gz`
+sbatch ../scripts/BWAln.sbatch $fq /pipeline/Runs/NextSeq/220201_NB501056_0753_AHLHYCBGXL/ProjectFolders/Project_Christina-Sparbier/*/${bname}_R2_001.fastq.gz
+done
+```
+
+# run multiqc
+```{bash}
+cd fastqc
+module load multiqc/1.8
+multiqc .
+```
+
+# get Dm Bam flagstats for normalisation
+```{bash}
+module load samtools/1.8
+
+samtools flagstat MHC-CSCT03-K562-CAS-H2AK119_S10.sort.Dm.bam
+15176 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-CAS-H3K27me3_S6.sort.Dm.bam
+31937 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-CAS-H3K4me3_S2.sort.Dm.bam
+589592 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-CAS-IgG_S1.sort.Dm.bam
+34 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-EEDko-H2AK119_S12.sort.Dm.bam
+8876 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-EEDko-H3K27me3_S8.sort.Dm.bam
+19259 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-EEDko-H3K4me3_S4.sort.Dm.bam
+287913 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-MEN1ko-H2AK119_S11.sort.Dm.bam
+20982 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-MEN1ko-H3K27me3_S7.sort.Dm.bam
+24215 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.Dm.bam
+1004103 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-PCGF1ko-H2AK119_S13.sort.Dm.bam
+15739 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-PCGF1ko-H3K27me3_S9.sort.Dm.bam
+14475 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-PCGF1ko-H3K4me3_S5.sort.Dm.bam
+290885 + 0 in total (QC-passed reads + QC-failed reads)
+```
+
+# Normalise to Dm reads by flagstat comparison and RPGC
+```{bash}
+# run from align dir
+# mkdirs for analysis
+mkdir ../cnt_analysis
+mkdir ../cnt_analysis/bed
+mkdir ../cnt_analysis/bedgraph
+mkdir BW_spikein_norm
+mkdir BW_RPGC_norm
+mkdir BW
+
+# scale factor for each is 1000000/Dm reads from flagstats file
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-CAS-H2AK119_S10.sort.bam 65.89352
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-CAS-H3K27me3_S6.sort.bam 31.31164
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-CAS-H3K4me3_S2.sort.bam 1.696088
+# spike-in norm is not reasonable for IgG, script still run to get BWs for consistency
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-CAS-IgG_S1.sort.bam 29411.76
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-EEDko-H2AK119_S12.sort.bam 112.6634
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-EEDko-H3K27me3_S8.sort.bam 51.92378
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-EEDko-H3K4me3_S4.sort.bam 3.473271
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-MEN1ko-H2AK119_S11.sort.bam 47.6599
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-MEN1ko-H3K27me3_S7.sort.bam 41.29672
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam 0.9959138
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-PCGF1ko-H2AK119_S13.sort.bam 63.53644
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-PCGF1ko-H3K27me3_S9.sort.bam 69.08463
+sbatch ../scripts/norm_bdg_bw.sbatch MHC-CSCT03-K562-PCGF1ko-H3K4me3_S5.sort.bam 3.437785
+```
+
+
+# peak calling with macs
+```{bash}
+mkdir macs
+cd macs
+mkdir broadpeaks_p0_05
+mkdir broadpeaks_p0_1
+mkdir broadpeaks_p0_2
+ 
+for bam in ../alignment/*-H*sort.bam
+do
+sbatch ../scripts/macs2.sbatch $bam ../alignment/MHC-CSCT03-K562-CAS-IgG_S1.sort.bam
+done
+```
+
+# also try implementing cut&run tools, run step-wise only alignment & peak calling
+```{bash}
+# make a working dir for cnrtools and run from there (set to work dir in config)
+mkdir cnr_tools_wd
+
+# run validation and create scripts first, use software installed in prev project dir
+cd cnr_tools_wd
+/dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK/cutandruntools/validate.py ../scripts/config.json
+/dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK/cutandruntools/create_scripts.py ../scripts/config.json
+
+# run step-wise for more control, needs too be run from tools wd & use symbolic links in wd for fastqs
+for fq in *_R1_001.fastq.gz
+do
+sbatch integrated.sh $fq
+done
+
+for bam in aligned.aug10/*aligned_reads.bam
+do
+sbatch aligned.aug10/integrated.step2.sh $bam
+done
+```
+
+# post-process CnR tools output so it will work properly with diffpeaks (separate organisms and sort)
+```{bash}
+# run from cnrt output alignment dir
+cd aligned.aug10
+for bam in *aligned_reads.bam
+do
+sbatch ../../scripts/cnrt_postprocess_bams.sbatch $bam
+done
+```
+
+# run through CUT&TAG data processing and analysis protocol
+```{bash}
+# original alignment is equivalent to recommendations in protocol other than removal of duplicates
+# authors suggest not removing dups as fragments with same coords are expected due to protocol
+# so get tdf and bai on non rmdup bam
+module load samtools/1.8
+module load igvtools/2.3.95
+
+for bam in *sort.bam
+do
+bname=`basename $bam .sort.bam`
+samtools index $bam
+igvtools count $bam ${bname}.tdf hg19
+done
+
+# run this script from cnt analysis dir
+cd ../cnt_analysis
+for bam in ../alignment/*-H*sort.bam
+do
+sbatch ../scripts/run_seacr.sbatch $bam
+done
+```
+
+
+# make matrix of control peaks calls from cnr tools with macs
+### had issue with this in default R/4.0.2 so had to switch to 4.1.0 for this one
+```{r}
+library(GenomicRanges)
+library(Rsubread)
+library(dplyr)
+library(stringr)
+library(chromVAR)
+
+cnrt.dir <- file.path(project.dir, "cnr_tools_wd")
+macs.dir <- file.path(cnrt.dir, "macs2.broad.all.frag.aug18")
+fip.dir <- file.path(project.dir, "frag_in_peak")
+dir.create(fip.dir)
+
+# make master peak list
+bams <- list.files(align.dir, pattern = "-H.*[0-9].sort.bam$", full.names = TRUE)
+# EEDko-H3K27 did not have enough reads for control peak calling so remove from diff analysis to avoid errors
+bams <- bams[-5]
+
+mPeak <- GRanges()
+for(bam in bams){
+  bname <- gsub(".sort.bam", "", basename(bam))
+  peakRes = read.table(
+    file.path(macs.dir, paste0(bname, "_aligned_reads_peaks.broadPeak")),
+    header = FALSE, 
+    fill = TRUE
+    )
+  mPeak = GRanges(seqnames = peakRes$V1, IRanges(start = peakRes$V2, end = peakRes$V3), strand = "*") %>% append(mPeak, .)
+}
+masterPeak = reduce(mPeak)
+
+# get fragment counts for each peak in the master peaks list
+countsMat <- matrix(NA, length(masterPeak), length(bams))
+i <- 1
+for(bam in bams){
+  fragment_counts <- chromVAR::getCounts(bam, masterPeak, paired = TRUE, by_rg = FALSE, format = "bam")
+  countsMat[, i] = counts(fragment_counts)[, 1]
+  i = i+1
+}
+
+# add col and row names
+colnames(countsMat) <- gsub("-", "_", gsub("MHC-CSCT03-K562-", "", gsub(".sort.bam", "", basename(bams))))
+rownames(countsMat) <- paste0(seqnames(masterPeak), ":", start(masterPeak), "-", end(masterPeak))
+
+# remove low counts
+keep <- which(rowSums(countsMat > 0) >= 2)
+countsMat <- countsMat[keep, ]
+
+# write out counts matrix
+write.table(
+  countsMat,
+  file.path(fip.dir, "cnrt_macs_peaks_counts_matrix.txt"),
+  sep = "\t",
+  row.names = TRUE,
+  col.names = NA
+  )
+```
+
+# get Hg Bam flagstats for normalisation as we think this may be a better way to normalise for these
+```{bash}
+module load samtools/1.8
+
+samtools flagstat MHC-CSCT03-K562-CAS-H2AK119_S10.sort.bam
+5740267 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-CAS-H3K27me3_S6.sort.bam
+14594315 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-CAS-H3K4me3_S2.sort.bam
+12965415 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-CAS-IgG_S1.sort.bam
+3220 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-EEDko-H2AK119_S12.sort.bam
+5527040 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-EEDko-H3K27me3_S8.sort.bam
+2356 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-EEDko-H3K4me3_S4.sort.bam
+8482089 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-MEN1ko-H2AK119_S11.sort.bam
+6526423 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-MEN1ko-H3K27me3_S7.sort.bam
+9723317 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam
+12270993 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-PCGF1ko-H2AK119_S13.sort.bam
+5707170 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-PCGF1ko-H3K27me3_S9.sort.bam
+9291511 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat MHC-CSCT03-K562-PCGF1ko-H3K4me3_S5.sort.bam
+9549439 + 0 in total (QC-passed reads + QC-failed reads)
+```
+
+# re-do normalisation and pseudocounting based on Hg reads
+```{r}
+countsDF <- as.data.frame(countsMat)
+# normalise pseudocounts as in prev analysis by Dm reads, then write out
+countsDF$CAS_H2AK119_S10 <- (countsDF$CAS_H2AK119_S10 + 0.5) * 0.1742079
+countsDF$CAS_H3K27me3_S6 <- (countsDF$CAS_H3K27me3_S6 + 0.5) * 0.06851983
+countsDF$CAS_H3K4me3_S2 <- (countsDF$CAS_H3K4me3_S2 + 0.5) * 0.07712827
+countsDF$EEDko_H2AK119_S12 <- (countsDF$EEDko_H2AK119_S12 + 0.5) * 0.1809287
+# no EEDKO_K27
+countsDF$EEDko_H3K4me3_S4 <-(countsDF$EEDko_H3K4me3_S4 + 0.5) * 0.1178955
+countsDF$MEN1ko_H2AK119_S11 <- (countsDF$MEN1ko_H2AK119_S11 + 0.5) * 0.1532233
+countsDF$MEN1ko_H3K27me3_S7 <- (countsDF$MEN1ko_H3K27me3_S7 + 0.5) * 0.1028456
+countsDF$MEN1ko_H3K4me3_S3 <- (countsDF$MEN1ko_H3K4me3_S3 + 0.5) * 0.081493
+countsDF$PCGF1ko_H2AK119_S13 <- (countsDF$PCGF1ko_H2AK119_S13 + 0.5) * 0.1752182
+countsDF$PCGF1ko_H3K27me3_S9 <- (countsDF$PCGF1ko_H3K27me3_S9 + 0.5) * 0.1076251
+countsDF$PCGF1ko_H3K4me3_S5 <- (countsDF$PCGF1ko_H3K4me3_S5 + 0.5) * 0.1047182
+
+write.table(
+  countsDF,
+  file.path(fip.dir, "Norm_psuedocount_cnrt_macs_peaks_counts_matrix.txt"),
+  sep = "\t",
+  row.names = TRUE,
+  col.names = NA
+  )
+
+countsNorm <- as.data.frame(countsMat)
+# also normalise non-pseudocounts by Dm reads, then write out
+countsNorm$CAS_H2AK119_S10 <- (countsNorm$CAS_H2AK119_S10) * 0.1742079
+countsNorm$CAS_H3K27me3_S6 <- (countsNorm$CAS_H3K27me3_S6) * 0.06851983
+countsNorm$CAS_H3K4me3_S2 <- (countsNorm$CAS_H3K4me3_S2) * 0.07712827
+countsNorm$EEDko_H2AK119_S12 <- (countsNorm$EEDko_H2AK119_S12) * 0.1809287
+# no EEDKO_K27
+countsNorm$EEDko_H3K4me3_S4 <-(countsNorm$EEDko_H3K4me3_S4) * 0.1178955
+countsNorm$MEN1ko_H2AK119_S11 <- (countsNorm$MEN1ko_H2AK119_S11) * 0.1532233
+countsNorm$MEN1ko_H3K27me3_S7 <- (countsNorm$MEN1ko_H3K27me3_S7) * 0.1028456
+countsNorm$MEN1ko_H3K4me3_S3 <- (countsNorm$MEN1ko_H3K4me3_S3) * 0.081493
+countsNorm$PCGF1ko_H2AK119_S13 <- (countsNorm$PCGF1ko_H2AK119_S13) * 0.1752182
+countsNorm$PCGF1ko_H3K27me3_S9 <- (countsNorm$PCGF1ko_H3K27me3_S9) * 0.1076251
+countsNorm$PCGF1ko_H3K4me3_S5 <- (countsNorm$PCGF1ko_H3K4me3_S5) * 0.1047182
+
+write.table(
+  countsNorm,
+  file.path(fip.dir, "Norm_cnrt_macs_peaks_counts_matrix.txt"),
+  sep = "\t",
+  row.names = TRUE,
+  col.names = NA
+  )
+```
+
+# use cnrt macs peaks to get LFC of frags in peaks
+```{r}
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+library(limma)
+
+# get annotation object
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+
+# set desired comparisons
+comps <- list(
+	"MEN1KOvCAS_H3K4me3" = c("MEN1ko_H3K4me3_S3", "CAS_H3K4me3_S2"),
+	"EEDKOvCAS_H3K4me3" = c("EEDko_H3K4me3_S4", "CAS_H3K4me3_S2"),
+	"PCGF1KOvCAS_H3K4me3" = c("PCGF1ko_H3K4me3_S5", "CAS_H3K4me3_S2"),
+	"MEN1KOvCAS_H3K27me3" = c("MEN1ko_H3K27me3_S7", "CAS_H3K27me3_S6"),
+	"PCGF1KOvCAS_H3K27me3" = c("PCGF1ko_H3K27me3_S9", "CAS_H3K27me3_S6"),
+	"MEN1KOvCAS_H2AK119" = c("MEN1ko_H2AK119_S11", "CAS_H2AK119_S10"),
+	"EEDKOvCAS_H2AK119" = c("EEDko_H2AK119_S12", "CAS_H2AK119_S10"),
+	"PCGF1KOvCAS_H2AK119" = c("PCGF1ko_H2AK119_S13", "CAS_H2AK119_S10")
+)
+
+# get lfc of reads in peaks in norm pseudocounts table for each comparison
+for(comp.i in 1:length(comps)){
+
+	# get each comparison to specify peaks matrix
+	comp.x <- comps[[comp.i]][1]
+	comp.y <- comps[[comp.i]][2]
+
+	comp.table <- cbind(countsDF[ , comp.x], countsDF[ , comp.y])
+	colnames(comp.table) <- c(comp.x, comp.y)
+	rownames(comp.table) <- rownames(countsDF)
+	# remove those with zeros in both
+	keep <- which(rowSums(countsMat[,c(comp.x, comp.y)] >= 5) == 2)
+	comp.table <- comp.table[keep, ]
+	comp.table <- as.data.frame(comp.table)
+	# add lfc
+	comp.table$LFC <- log2(comp.table[, comp.x]/comp.table[, comp.y])
+	# add coordinates to table
+	chr.pos <- strsplit2(rownames(comp.table), ":")
+	comp.table$Chr <- chr.pos[,1]
+	start.end <- strsplit2(chr.pos[,2], "-")
+	comp.table$Start <- as.numeric(start.end[,1])
+	comp.table$End <- as.numeric(start.end[,2])
+
+	# make genomic ranges object for annotation
+	gr.fc.table <- with(comp.table, GRanges(Chr, IRanges(start=Start, end=End)))
+	gr.fc.table$LFC <- comp.table$LFC
+	seqlevelsStyle(gr.fc.table) <- "UCSC"
+	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+	lfc.ann.table <- as.data.frame(lfc.ann)
+	lfc.counts.table <- cbind(comp.table[1:2], lfc.ann.table)
+	intron <- which(substr(lfc.counts.table$annotation, 1, 6) == "Intron")
+	lfc.counts.table$annotation[intron] <- "Intron"
+	exon <- which(substr(lfc.counts.table$annotation, 1, 4) == "Exon")
+	lfc.counts.table$annotation[exon] <- "Exon"
+	
+	write.table(
+		lfc.counts.table,
+		file.path(fip.dir, paste0(names(comps[comp.i]), '_cnrt_macs_peaks_fip_lfc_pseudocount.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+}
+
+# now for non-pseudocounts with log2(1+...)
+for(comp.i in 1:length(comps)){
+
+	# get each comparison to specify peaks matrix
+	comp.x <- comps[[comp.i]][1]
+	comp.y <- comps[[comp.i]][2]
+
+	comp.table <- cbind(countsNorm[ , comp.x], countsNorm[ , comp.y])
+	colnames(comp.table) <- c(comp.x, comp.y)
+	rownames(comp.table) <- rownames(countsNorm)
+	# remove those with zeros in both
+	keep <- which(rowSums(countsMat[,c(comp.x, comp.y)] >= 5) == 2)
+	comp.table <- comp.table[keep, ]
+	comp.table <- as.data.frame(comp.table)
+	# add lfc
+	comp.table$LFC <- log2((1+comp.table[, comp.x])/(1+comp.table[, comp.y]))
+	# add coordinates to table
+	chr.pos <- strsplit2(rownames(comp.table), ":")
+	comp.table$Chr <- chr.pos[,1]
+	start.end <- strsplit2(chr.pos[,2], "-")
+	comp.table$Start <- as.numeric(start.end[,1])
+	comp.table$End <- as.numeric(start.end[,2])
+
+	# make genomic ranges object for annotation
+	gr.fc.table <- with(comp.table, GRanges(Chr, IRanges(start=Start, end=End)))
+	gr.fc.table$LFC <- comp.table$LFC
+	seqlevelsStyle(gr.fc.table) <- "UCSC"
+	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+	lfc.ann.table <- as.data.frame(lfc.ann)
+	lfc.counts.table <- cbind(comp.table[1:2], lfc.ann.table)
+	intron <- which(substr(lfc.counts.table$annotation, 1, 6) == "Intron")
+	lfc.counts.table$annotation[intron] <- "Intron"
+	exon <- which(substr(lfc.counts.table$annotation, 1, 4) == "Exon")
+	lfc.counts.table$annotation[exon] <- "Exon"
+	
+	write.table(
+		lfc.counts.table,
+		file.path(fip.dir, paste0(names(comps[comp.i]), '_cnrt_macs_peaks_fip_lfc_1plusnorm.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+}
+```
+
+# make separate matrix for each mark
+```{r}
+# loop through marks and make a separate list for each
+marks <- c("H2AK119", "H3K27me3", "H3K4me3")
+
+# make a list of matrices for all marks
+marksMat <- list()
+
+for(mark in marks){
+  # make master peak list
+  bams <- list.files(align.dir, pattern = paste0(mark, "_S[0-9]{1,2}.sort.bam$"), full.names = TRUE)
+  
+  mPeak <- GRanges()
+  for(bam in bams){
+    bname <- gsub(".sort.bam", "", basename(bam))
+    peakRes = read.table(
+      file.path(macs.dir, paste0(bname, "_aligned_reads_peaks.broadPeak")),
+      header = FALSE, 
+      fill = TRUE
+      )
+    mPeak = GRanges(seqnames = peakRes$V1, IRanges(start = peakRes$V2, end = peakRes$V3), strand = "*") %>% append(mPeak, .)
+  }
+  masterPeak = reduce(mPeak)
+  
+  # get fragment counts for each peak in the master peaks list
+  marksMat[[mark]] <- matrix(NA, length(masterPeak), length(bams))
+  i <- 1
+  for(bam in bams){
+    fragment_counts <- chromVAR::getCounts(bam, masterPeak, paired = TRUE, by_rg = FALSE, format = "bam")
+    marksMat[[mark]][, i] = counts(fragment_counts)[, 1]
+    i = i+1
+  }
+  
+  # add col and row names
+  colnames(marksMat[[mark]]) <- gsub("-", "_", gsub("MHC-CSCT03-K562-", "", gsub(".sort.bam", "", basename(bams))))
+  rownames(marksMat[[mark]]) <- paste0(seqnames(masterPeak), ":", start(masterPeak), "-", end(masterPeak))
+  
+  # remove zero counts
+  keep <- which(rowSums(marksMat[[mark]] > 0) >= 1)
+  marksMat[[mark]] <- marksMat[[mark]][keep, ]
+  
+  # write out counts matrix
+  write.table(
+    marksMat[[mark]],
+    file.path(fip.dir, paste0(mark, "_cnrt_macs_peaks_counts_matrix.txt")),
+    sep = "\t",
+    row.names = TRUE,
+    col.names = NA
+    )
+}
+```
+
+
+# normalise new matrices as above based on Hg reads
+```{r}
+marksNorm <- list()
+marksNorm$H2AK119 <- as.data.frame(marksMat$H2AK119)
+marksNorm$H3K27me3 <- as.data.frame(marksMat$H3K27me3)
+marksNorm$H3K4me3 <- as.data.frame(marksMat$H3K4me3)
+# also normalise non-pseudocounts by Dm reads, then write out
+# also normalise non-pseudocounts by Dm reads, then write out
+marksNorm$H2AK119$CAS_H2AK119_S10 <- (marksNorm$H2AK119$CAS_H2AK119_S10) * 0.1742079
+marksNorm$H3K27me3$CAS_H3K27me3_S6 <- (marksNorm$H3K27me3$CAS_H3K27me3_S6) * 0.06851983
+marksNorm$H3K4me3$CAS_H3K4me3_S2 <- (marksNorm$H3K4me3$CAS_H3K4me3_S2) * 0.07712827
+marksNorm$H2AK119$EEDko_H2AK119_S12 <- (marksNorm$H2AK119$EEDko_H2AK119_S12) * 0.1809287
+# no EEDKO_K27
+marksNorm$H3K27me3 <- marksNorm$H3K27me3[, -2]
+marksNorm$H3K4me3$EEDko_H3K4me3_S4 <-(marksNorm$H3K4me3$EEDko_H3K4me3_S4) * 0.1178955
+marksNorm$H2AK119$MEN1ko_H2AK119_S11 <- (marksNorm$H2AK119$MEN1ko_H2AK119_S11) * 0.1532233
+marksNorm$H3K27me3$MEN1ko_H3K27me3_S7 <- (marksNorm$H3K27me3$MEN1ko_H3K27me3_S7) * 0.1028456
+marksNorm$H3K4me3$MEN1ko_H3K4me3_S3 <- (marksNorm$H3K4me3$MEN1ko_H3K4me3_S3) * 0.081493
+marksNorm$H2AK119$PCGF1ko_H2AK119_S13 <- (marksNorm$H2AK119$PCGF1ko_H2AK119_S13) * 0.1752182
+marksNorm$H3K27me3$PCGF1ko_H3K27me3_S9 <- (marksNorm$H3K27me3$PCGF1ko_H3K27me3_S9) * 0.1076251
+marksNorm$H3K4me3$PCGF1ko_H3K4me3_S5 <- (marksNorm$H3K4me3$PCGF1ko_H3K4me3_S5) * 0.1047182
+
+for(mark in marks){
+  write.table(
+    marksNorm[[mark]],
+    file.path(fip.dir, paste0(mark, "_Norm_cnrt_macs_peaks_counts_matrix.txt")),
+    sep = "\t",
+    row.names = TRUE,
+    col.names = NA
+    )
+}
+```
+
+
+# get LFC and annotate new frags in peaks
+```{r}
+# make list of mark comps
+mark.comps <- list()
+mark.comps[["H3K4me3"]] <- list(comps[[1]], comps[[2]], comps[[3]])
+names(mark.comps[["H3K4me3"]]) <- names(comps)[1:3]
+mark.comps[["H3K27me3"]] <- list(comps[[4]], comps[[5]])
+names(mark.comps[["H3K27me3"]]) <- names(comps)[4:5]
+mark.comps[["H2AK119"]] <- list(comps[[6]], comps[[7]], comps[[8]])
+names(mark.comps[["H2AK119"]]) <- names(comps)[6:8]
+
+for(mark in marks){
+  
+  for(comp.i in 1:length(mark.comps[[mark]])){
+  
+  	# get each comparison to specify peaks matrix
+  	comp.x <- mark.comps[[mark]][[comp.i]][1]
+  	comp.y <- mark.comps[[mark]][[comp.i]][2]
+  
+  	comp.table <- cbind(marksNorm[[mark]][, comp.x], marksNorm[[mark]][, comp.y])
+  	colnames(comp.table) <- c(comp.x, comp.y)
+  	rownames(comp.table) <- rownames(marksNorm[[mark]])
+  	# remove those with zeros in both
+  	keep <- which(rowSums(marksMat[[mark]][, c(comp.x, comp.y)] >= 5) == 2)
+  	comp.table <- comp.table[keep, ]
+  	comp.table <- as.data.frame(comp.table)
+  	# add lfc
+  	comp.table$LFC <- log2(comp.table[, comp.x]/comp.table[, comp.y])
+  	# add coordinates to table
+  	chr.pos <- strsplit2(rownames(comp.table), ":")
+  	comp.table$Chr <- chr.pos[,1]
+  	start.end <- strsplit2(chr.pos[,2], "-")
+  	comp.table$Start <- as.numeric(start.end[,1])
+  	comp.table$End <- as.numeric(start.end[,2])
+  
+  	# make genomic ranges object for annotation
+  	gr.fc.table <- with(comp.table, GRanges(Chr, IRanges(start=Start, end=End)))
+  	gr.fc.table$LFC <- comp.table$LFC
+  	seqlevelsStyle(gr.fc.table) <- "UCSC"
+  	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+  	lfc.ann.table <- as.data.frame(lfc.ann)
+  	lfc.counts.table <- cbind(comp.table[1:2], lfc.ann.table)
+  	intron <- which(substr(lfc.counts.table$annotation, 1, 6) == "Intron")
+  	lfc.counts.table$annotation[intron] <- "Intron"
+  	exon <- which(substr(lfc.counts.table$annotation, 1, 4) == "Exon")
+  	lfc.counts.table$annotation[exon] <- "Exon"
+  	
+  	write.table(
+  		lfc.counts.table,
+  		file.path(fip.dir, paste0(names(mark.comps[[mark]])[comp.i], '_cnrt_macs_Norm_Mark_Peaks_fip_lfc.txt')),
+  		sep = '\t',
+  		col.names = TRUE,
+  		row.names = FALSE,
+  		quote = FALSE
+  		)
+  }
+}
+```
+
+
+# and again for WT peaks only
+```{r}
+# make a list of matrices for all marks
+marksMat <- list()
+
+for(mark in marks){
+  # make master peak list
+  bams <- list.files(align.dir, pattern = paste0(mark, "_S[0-9]{1,2}.sort.bam$"), full.names = TRUE)
+  
+  masterPeak <- GRanges()
+  peakRes = read.table(
+    file.path(list.files(macs.dir, pattern = paste0("CAS-", mark, "_S[0-9]{1,2}_aligned_reads_peaks.broadPeak"), full.names = TRUE)),
+    header = FALSE, 
+    fill = TRUE
+    )
+  masterPeak = GRanges(seqnames = peakRes$V1, IRanges(start = peakRes$V2, end = peakRes$V3), strand = "*")
+
+  # get fragment counts for each peak in the master peaks list
+  marksMat[[mark]] <- matrix(NA, length(masterPeak), length(bams))
+  i <- 1
+  for(bam in bams){
+    fragment_counts <- chromVAR::getCounts(bam, masterPeak, paired = TRUE, by_rg = FALSE, format = "bam")
+    marksMat[[mark]][, i] = counts(fragment_counts)[, 1]
+    i = i+1
+  }
+  
+  # add col and row names
+  colnames(marksMat[[mark]]) <- gsub("-", "_", gsub("MHC-CSCT03-K562-", "", gsub(".sort.bam", "", basename(bams))))
+  rownames(marksMat[[mark]]) <- paste0(seqnames(masterPeak), ":", start(masterPeak), "-", end(masterPeak))
+  
+  # remove zero counts
+  keep <- which(rowSums(marksMat[[mark]] > 0) >= 1)
+  marksMat[[mark]] <- marksMat[[mark]][keep, ]
+  
+  # write out counts matrix
+  write.table(
+    marksMat[[mark]],
+    file.path(fip.dir, paste0(mark, "_cnrt_macs_WTpeaks_counts_matrix.txt")),
+    sep = "\t",
+    row.names = TRUE,
+    col.names = NA
+    )
+}
+```
+
+
+# normalise new matrices as above based on Hg reads
+```{r}
+marksNorm <- list()
+marksNorm$H2AK119 <- as.data.frame(marksMat$H2AK119)
+marksNorm$H3K27me3 <- as.data.frame(marksMat$H3K27me3)
+marksNorm$H3K4me3 <- as.data.frame(marksMat$H3K4me3)
+# also normalise non-pseudocounts by Dm reads, then write out
+# also normalise non-pseudocounts by Dm reads, then write out
+marksNorm$H2AK119$CAS_H2AK119_S10 <- (marksNorm$H2AK119$CAS_H2AK119_S10) * 0.1742079
+marksNorm$H3K27me3$CAS_H3K27me3_S6 <- (marksNorm$H3K27me3$CAS_H3K27me3_S6) * 0.06851983
+marksNorm$H3K4me3$CAS_H3K4me3_S2 <- (marksNorm$H3K4me3$CAS_H3K4me3_S2) * 0.07712827
+marksNorm$H2AK119$EEDko_H2AK119_S12 <- (marksNorm$H2AK119$EEDko_H2AK119_S12) * 0.1809287
+# no EEDKO_K27
+marksNorm$H3K27me3 <- marksNorm$H3K27me3[, -2]
+marksNorm$H3K4me3$EEDko_H3K4me3_S4 <-(marksNorm$H3K4me3$EEDko_H3K4me3_S4) * 0.1178955
+marksNorm$H2AK119$MEN1ko_H2AK119_S11 <- (marksNorm$H2AK119$MEN1ko_H2AK119_S11) * 0.1532233
+marksNorm$H3K27me3$MEN1ko_H3K27me3_S7 <- (marksNorm$H3K27me3$MEN1ko_H3K27me3_S7) * 0.1028456
+marksNorm$H3K4me3$MEN1ko_H3K4me3_S3 <- (marksNorm$H3K4me3$MEN1ko_H3K4me3_S3) F
+marksNorm$H2AK119$PCGF1ko_H2AK119_S13 <- (marksNorm$H2AK119$PCGF1ko_H2AK119_S13) * 0.1752182
+marksNorm$H3K27me3$PCGF1ko_H3K27me3_S9 <- (marksNorm$H3K27me3$PCGF1ko_H3K27me3_S9) * 0.1076251
+marksNorm$H3K4me3$PCGF1ko_H3K4me3_S5 <- (marksNorm$H3K4me3$PCGF1ko_H3K4me3_S5) * 0.1047182
+
+for(mark in marks){
+  write.table(
+    marksNorm[[mark]],
+    file.path(fip.dir, paste0(mark, "_Norm_cnrt_macs_WTpeaks_counts_matrix.txt")),
+    sep = "\t",
+    row.names = TRUE,
+    col.names = NA
+    )
+}
+```
+
+
+# get LFC and annotate new frags in peaks
+```{r}
+for(mark in marks){
+  
+  for(comp.i in 1:length(mark.comps[[mark]])){
+  
+  	# get each comparison to specify peaks matrix
+  	comp.x <- mark.comps[[mark]][[comp.i]][1]
+  	comp.y <- mark.comps[[mark]][[comp.i]][2]
+  
+  	comp.table <- cbind(marksNorm[[mark]][, comp.x], marksNorm[[mark]][, comp.y])
+  	colnames(comp.table) <- c(comp.x, comp.y)
+  	rownames(comp.table) <- rownames(marksNorm[[mark]])
+  	# remove those with zeros in both
+  	keep <- which(rowSums(marksMat[[mark]][, c(comp.x, comp.y)] >= 5) == 2)
+  	comp.table <- comp.table[keep, ]
+  	comp.table <- as.data.frame(comp.table)
+  	# add lfc
+  	comp.table$LFC <- log2(comp.table[, comp.x]/comp.table[, comp.y])
+  	# add coordinates to table
+  	chr.pos <- strsplit2(rownames(comp.table), ":")
+  	comp.table$Chr <- chr.pos[,1]
+  	start.end <- strsplit2(chr.pos[,2], "-")
+  	comp.table$Start <- as.numeric(start.end[,1])
+  	comp.table$End <- as.numeric(start.end[,2])
+  
+  	# make genomic ranges object for annotation
+  	gr.fc.table <- with(comp.table, GRanges(Chr, IRanges(start=Start, end=End)))
+  	gr.fc.table$LFC <- comp.table$LFC
+  	seqlevelsStyle(gr.fc.table) <- "UCSC"
+  	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+  	lfc.ann.table <- as.data.frame(lfc.ann)
+  	lfc.counts.table <- cbind(comp.table[1:2], lfc.ann.table)
+  	intron <- which(substr(lfc.counts.table$annotation, 1, 6) == "Intron")
+  	lfc.counts.table$annotation[intron] <- "Intron"
+  	exon <- which(substr(lfc.counts.table$annotation, 1, 4) == "Exon")
+  	lfc.counts.table$annotation[exon] <- "Exon"
+  	
+  	write.table(
+  		lfc.counts.table,
+  		file.path(fip.dir, paste0(names(mark.comps[[mark]])[comp.i], '_cnrt_macs_Norm_Mark_WTPeaks_fip_lfc.txt')),
+  		sep = '\t',
+  		col.names = TRUE,
+  		row.names = FALSE,
+  		quote = FALSE
+  		)
+  }
+}
+```
+
+# boxplot of menin vs not and bivalent vs not for each comparison, using lfc of fip from cnrt macs output
+# also try waterfall plot per charlie's suggestion
+```{r}
+library(data.table)
+library(ggplot2)
+
+cnr.diff.dir <- file.path(cnrt.dir, "bdgdiff_macs2_broad")
+
+# read in K562 bivalent gene
+bivalent <- fread("/dawson_genomics/Projects/Menin/CUTandTAG_220328_NB501056_0777_AHNGTWBGXL/bivalent_genes/CnT_K562_bivalent_genes.txt")
+exp.genes <- fread("/dawson_genomics/Projects/Menin/RNAseq_190301_NB501056_0277_AH53JJBGXB_analysis/Results/Counts.txt")
+
+# put lfc table data into list for further plots
+lfc.table.list <- list()
+for(comp.i in 1:length(comps)){
+  lfc.table <- fread(file.path(fip.dir, paste0(names(comps)[comp.i], "_cnrt_macs_Norm_Mark_Peaks_fip_lfc.txt")))
+  lfc.table.list[[names(comps)[comp.i]]] <- lfc.table
+}
+
+# make comps list for each mark as plots will be different
+k4.comps <- c("MEN1KOvCAS_H3K4me3", "PCGF1KOvCAS_H3K4me3", "EEDKOvCAS_H3K4me3")
+k27.comps <- c("MEN1KOvCAS_H3K27me3", "PCGF1KOvCAS_H3K27me3")
+
+for(comp in k4.comps){
+  fip.table <- fread(file.path(fip.dir, paste0(comp, "_cnrt_macs_Norm_Mark_Peaks_fip_lfc.txt")))
+  ### DEPRECATED minds changed re TSS
+  # limit to TSS +/- 500bp
+  #lfc.table <- subset(lfc.table, distanceToTSS >= -500 & distanceToTSS <= 500)
+  # instead limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-which(is.na(lfc.table$ENSEMBL)), ])
+  # filter for at least 1 read per million in both
+  keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+  lfc.table <- lfc.table[keep,]
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2((lfc.table[,2])/(lfc.table[,3]))
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_normnopsuedo_", comp, "_1RPMfilt_MarkPeaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+  
+  # now make waterfall plot
+  bar.not.men.not.bi <- not.men.not.bi.data[, "LFC"]
+  bar.not.men.bi <- not.men.bi.data[, "LFC"]
+  bar.men.not.bi <- men.not.bi.data[, "LFC"]
+  bar.men.bi <- men.bi.data[, "LFC"]
+  pdf(file.path(plots.dir, paste0("Waterfall_", comp, "_1RPMfilt_MarkPeaks.pdf")))
+  #par(mfrow=c(2,2))
+  barplot(
+    bar.not.men.not.bi[order(bar.not.men.not.bi, decreasing = TRUE)], 
+    col = "gray30", 
+    border = "gray30", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " non-Menin, non-bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  barplot(
+    bar.not.men.bi[order(bar.not.men.bi, decreasing = TRUE)], 
+    col = "deeppink3", 
+    border = "deeppink3", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " non-Menin, bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  barplot(
+    bar.men.not.bi[order(bar.men.not.bi, decreasing = TRUE)], 
+    col = "gray90", 
+    border = "gray90", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " Menin, non-bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  barplot(
+    bar.men.bi[order(bar.men.bi, decreasing = TRUE)], 
+    col = "deepskyblue2", 
+    border = "deepskyblue2", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " Menin, bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  dev.off()
+  
+  # make overlapping barplots of reads in WT and KO
+  read.bar.not.men.not.bi <- t(not.men.not.bi.data[order(not.men.not.bi.data[,3], decreasing = TRUE), 2:3])
+  read.bar.not.men.bi <- t(not.men.bi.data[order(not.men.bi.data[,3], decreasing = TRUE), 2:3])
+  read.bar.men.not.bi <- t(men.not.bi.data[order(men.not.bi.data[,3], decreasing = TRUE), 2:3])
+  read.bar.men.bi <- t(men.bi.data[order(men.bi.data[,3], decreasing = TRUE), 2:3])
+  pdf(file.path(plots.dir, paste0("Reads_bar_", comp, "_1RPMfilt_MarkPeaks.pdf")), width = 12, height = 8)
+  #par(mar = c(4, 4, 2, 2), xpd = TRUE)
+  par(mfrow = c(4,1))
+  barplot(
+    read.bar.not.men.not.bi, 
+    col = c("gray30", "wheat3"), 
+    border = c("gray30", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " non-Menin, non-bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("gray30", "wheat3"))
+  barplot(
+    read.bar.not.men.bi, 
+    col = c("deeppink3", "wheat3"), 
+    border = c("deeppink3", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " non-Menin, bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("deeppink3", "wheat3"))
+  barplot(
+    read.bar.men.not.bi, 
+    col = c("gray90", "wheat3"), 
+    border = c("gray90", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " Menin, non-bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("gray90", "wheat3"))
+  barplot(
+    read.bar.men.bi, 
+    col = c("deepskyblue2", "wheat3"), 
+    border = c("deepskyblue2", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " Menin, bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("deepskyblue2", "wheat3"))
+  dev.off()
+  
+  # make scatterplot of |LFC| vs reads to show correlation
+  lfc.table$totalReads <- rowSums(lfc.table[, 2:3])
+  pdf(file.path(plots.dir, paste0("Scatter_", comp, "_1RPMfilt_MarkPeaks.pdf")))
+  plot(
+    lfc.table$totalReads,
+    abs(lfc.table$LFC), 
+    main = paste0(comp, " reads v |LFC| correlation"), 
+    col = rgb(0, 100, 0, 50, maxColorValue = 255),
+    xlab = "Total reads (KO + WT)", 
+    ylab = expression(bold(paste("Absolute value of log"[2], " FC"))),
+    pch = 16
+    )
+  #abline(lm(abs(lfc.table$LFC) ~ lfc.table$totalReads), col = "red", lwd = 3)
+  #text(paste("Correlation:", round(cor(lfc.table$totalReads, abs(lfc.table$LFC)), 2)), x = 25, y = 95)
+  dev.off()
+}
+
+for(comp in k27.comps){
+  fip.table <- fread(file.path(fip.dir, paste0(comp, "_cnrt_macs_Norm_Mark_WTPeaks_fip_lfc.txt")))
+  # limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-is.na(lfc.table$ENSEMBL), ])
+  # filter for at least 1 read per million in both
+  keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+  lfc.table <- lfc.table[keep,]
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2(lfc.table[,2]/lfc.table[,3])
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_normnopseudo_", comp, "_MarkWTPeaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+  
+  # now make waterfall plot
+  bar.not.men.not.bi <- not.men.not.bi.data[, "LFC"]
+  bar.not.men.bi <- not.men.bi.data[, "LFC"]
+  bar.men.not.bi <- men.not.bi.data[, "LFC"]
+  bar.men.bi <- men.bi.data[, "LFC"]
+  pdf(file.path(plots.dir, paste0("Waterfall_", comp, "_1RPMfilt_MarkPeaks.pdf")))
+  #par(mfrow=c(4,1))
+  barplot(
+    bar.not.men.not.bi[order(bar.not.men.not.bi, decreasing = TRUE)], 
+    col = "gray30", 
+    border = "gray30", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " non-Menin, non-bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  barplot(
+    bar.not.men.bi[order(bar.not.men.bi, decreasing = TRUE)], 
+    col = "deeppink3", 
+    border = "deeppink3", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " non-Menin, bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  barplot(
+    bar.men.not.bi[order(bar.men.not.bi, decreasing = TRUE)], 
+    col = "gray90", 
+    border = "gray90", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " Menin, non-bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  barplot(
+    bar.men.bi[order(bar.men.bi, decreasing = TRUE)], 
+    col = "deepskyblue2", 
+    border = "deepskyblue2", 
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(comp, " Menin, bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  dev.off()
+  
+  # make overlapping barplots of reads in WT and KO
+  read.bar.not.men.not.bi <- t(not.men.not.bi.data[order(not.men.not.bi.data[,3], decreasing = TRUE), 2:3])
+  read.bar.not.men.bi <- t(not.men.bi.data[order(not.men.bi.data[,3], decreasing = TRUE), 2:3])
+  read.bar.men.not.bi <- t(men.not.bi.data[order(men.not.bi.data[,3], decreasing = TRUE), 2:3])
+  read.bar.men.bi <- t(men.bi.data[order(men.bi.data[,3], decreasing = TRUE), 2:3])
+  pdf(file.path(plots.dir, paste0("Reads_bar_", comp, "_1RPMfilt_MarkPeaks.pdf")), width = 36, height = 8)
+  #par(mar = c(4, 4, 2, 2), xpd = TRUE)
+  barplot(
+    read.bar.not.men.not.bi, 
+    col = c("gray30", "wheat3"), 
+    border = c("gray30", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " non-Menin, non-bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("gray30", "wheat3"))
+  barplot(
+    read.bar.not.men.bi, 
+    col = c("deeppink3", "wheat3"), 
+    border = c("deeppink3", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " non-Menin, bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("deeppink3", "wheat3"))
+  barplot(
+    read.bar.men.not.bi, 
+    col = c("gray90", "wheat3"), 
+    border = c("gray90", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " Menin, non-bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("gray90", "wheat3"))
+  barplot(
+    read.bar.men.bi, 
+    col = c("deepskyblue2", "wheat3"), 
+    border = c("deepskyblue2", "wheat3"), 
+    xlab = "Genes", 
+    ylab = "Reads in Peaks",
+    main = paste0(comp, " Menin, bivalent genes"),
+    beside = TRUE,
+    axisnames = FALSE,
+    bty = "L"
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("deepskyblue2", "wheat3"))
+  dev.off()
+  
+  # make scatterplot of |LFC| vs reads to show correlation
+  lfc.table$totalReads <- rowSums(lfc.table[, 2:3])
+  pdf(file.path(plots.dir, paste0("Scatter_", comp, "_1RPMfilt_MarkPeaks.pdf")))
+  plot(
+    lfc.table$totalReads,
+    abs(lfc.table$LFC), 
+    main = paste0(comp, " reads v |LFC| correlation"), 
+    col = rgb(0, 100, 0, 50, maxColorValue = 255),
+    xlab = "Total reads (KO + WT)", 
+    ylab = expression(bold(paste("Absolute value of log"[2], " FC"))),
+    pch = 16
+    )
+  #abline(lm(abs(lfc.table$LFC) ~ lfc.table$totalReads), col = "red", lwd = 3)
+  #text(paste("Correlation:", round(cor(lfc.table$totalReads, abs(lfc.table$LFC)), 2)), x = 25, y = 95)
+  dev.off()
+}
+
+# for men1 and pcgf1 KO make LFC waterfalls w/K4 and K27 together
+ko.comps <- c("MEN1KOvCAS_K4_K27", "PCGF1KOvCAS_K4_K27")
+for(comp.i in 1:2){
+  # first get k4 data and make LFC table
+  fip.table <- fread(file.path(fip.dir, paste0(k4.comps[comp.i], "_cnrt_macs_Norm_Mark_WTPeaks_fip_lfc.txt")))
+  # limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-is.na(lfc.table$ENSEMBL), ])
+  # filter for at least 1 read per million in both
+  keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+  lfc.table <- lfc.table[keep,]
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2(lfc.table[,2]/lfc.table[,3])
+  # set LFC table as K4 table
+  k4.lfc.table <- lfc.table
+  # now same for k27
+  fip.table <- fread(file.path(fip.dir, paste0(k27.comps[comp.i], "_cnrt_macs_Norm_Mark_WTPeaks_fip_lfc.txt")))
+  # limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-is.na(lfc.table$ENSEMBL), ])
+  # filter for at least 1 read per million in both
+  keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+  lfc.table <- lfc.table[keep,]
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2(lfc.table[,2]/lfc.table[,3])
+  # set LFC table as K4 table
+  k27.lfc.table <- lfc.table
+  # now get menin and not bivalent gene tables for each
+  men.k4 <- k4.lfc.table[k4.lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.k4 <- k4.lfc.table[!(k4.lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.k4 <- men.k4[men.k4$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.bi.k4 <- not.men.k4[not.men.k4$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.k27 <- k27.lfc.table[k27.lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.k27 <- k27.lfc.table[!(k27.lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.k27 <- men.k27[men.k27$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.bi.k27 <- not.men.k27[not.men.k27$ENSEMBL %in% bivalent$ENSEMBL,]
+  # make table of lfcs for k4 and k7 in each group, fill with 0s for those not present in one or the other.
+  men.bi.both <- merge(men.bi.k4, men.bi.k27, all = TRUE, by = "ENSEMBL")
+  men.bi.bar.data <- rbind(t(men.bi.both$LFC.x), t(men.bi.both$LFC.y))
+  # order by K4 LFC
+  men.bi.bar.data <- men.bi.bar.data[, order(men.bi.bar.data[1,], decreasing = TRUE)]
+  not.men.bi.both <- merge(men.bi.k4, men.bi.k27, all = TRUE, by = "ENSEMBL")
+  not.men.bi.bar.data <- rbind(t(not.men.bi.both$LFC.x), t(not.men.bi.both$LFC.y))
+  # order by K4 LFC
+  not.men.bi.bar.data <- not.men.bi.bar.data[, order(not.men.bi.bar.data[1,], decreasing = TRUE)]
+  pdf(file.path(plots.dir, paste0(ko.comps[comp.i], "_barplot_1RPMfilt_MarkPeaks.pdf")))
+  #par(mfrow=c(4,1))
+  barplot(
+    men.bi.bar.data, 
+    col = c("deeppink3", "maroon4"), 
+    border = c("deeppink3", "maroon4"),
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(ko.comps[comp.i], " Menin, bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    xlab = "Genes",
+    beside = TRUE,
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("deeppink3", "maroon4"))
+  barplot(
+    not.men.bi.bar.data, 
+    col = c("deepskyblue2", "steelblue4"), 
+    border = c("deepskyblue2", "steelblue4"),
+    #space=0.5, 
+    #ylim=c(-100,100),
+    main = paste0(ko.comps[comp.i], " non-Menin, bivalent genes"), 
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    xlab = "Genes",
+    beside = TRUE,
+    cex.axis = 1.2, 
+    cex.lab = 1.4
+    )
+  legend("topright", legend = c("KO", "WT"), fill = c("deepskyblue2", "steelblue4"))
+  dev.off()
+}
+
+# now do same for lfc(1+...) data
+for(comp in k4.comps){
+  fip.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_1plusnorm.txt')))
+  ### DEPRECATED minds changed re TSS
+  # limit to TSS +/- 500bp
+  #lfc.table <- subset(lfc.table, distanceToTSS >= -500 & distanceToTSS <= 500)
+  # instead limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-which(is.na(lfc.table$ENSEMBL)), ])
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2((1+lfc.table[,2])/(1+lfc.table[,3]))
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_1plusnorm_", comp, "_MarkPeaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+for(comp in k27.comps){
+  fip.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_1plusnorm.txt')))
+  # limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-which(is.na(lfc.table$ENSEMBL)), ])
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2((1+lfc.table[,2])/(1+lfc.table[,3]))
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_1plusnorm_", comp, "_cnrt_macs_peaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+# now lfc(1+...) data only in rnaseq data
+for(comp in k4.comps){
+  lfc.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_1plusnorm.txt')))
+  # limit to TSS +/- 500bp
+  lfc.table <- subset(lfc.table, distanceToTSS >= -500 & distanceToTSS <= 500)
+  # now keep only exp and limit to reads and ENSG fpr next bit
+  lfc.table <- lfc.table[which(lfc.table$ENSEMBL %in% exp.genes$V1), c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total (in case of multiple peaks per gene)
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table)
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2((1+lfc.table[,2])/(1+lfc.table[,3]))
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_exp_genes_", comp, "_cnrt_macs_peaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+for(comp in k27.comps){
+  fip.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_1plusnorm.txt')))
+  # limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-is.na(lfc.table$ENSEMBL), ])
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2((1+lfc.table[,2])/(1+lfc.table[,3]))
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_1plusnorm_", comp, "_cnrt_macs_peaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+# make barplots of proportion up/downregulated for each KO for K119
+MEN1KO_K119_UP <- sum(lfc.table.list$MEN1KOvCAS_H2AK119$ENSEMBL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC>0] %in% bivalent)/length(lfc.table.list$MEN1KOvCAS_H2AK119$ENSEMBL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC>0])
+MEN1KO_K119_DOWN <- sum(lfc.table.list$MEN1KOvCAS_H2AK119$ENSEMBL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC<0] %in% bivalent)/length(lfc.table.list$MEN1KOvCAS_H2AK119$ENSEMBL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC<0])
+EEDKO_K119_UP <- sum(lfc.table.list$EEDKOvCAS_H2AK119$ENSEMBL[lfc.table.list$EEDKOvCAS_H2AK119$LFC>0] %in% bivalent)/length(lfc.table.list$EEDKOvCAS_H2AK119$ENSEMBL[lfc.table.list$EEDKOvCAS_H2AK119$LFC>0])
+EEDKO_K119_DOWN <- sum(lfc.table.list$EEDKOvCAS_H2AK119$ENSEMBL[lfc.table.list$EEDKOvCAS_H2AK119$LFC<0] %in% bivalent)/length(lfc.table.list$EEDKOvCAS_H2AK119$ENSEMBL[lfc.table.list$EEDKOvCAS_H2AK119$LFC<0])
+PCGF1KO_K119_UP <- sum(lfc.table.list$PCGF1KOvCAS_H2AK119$ENSEMBL[lfc.table.list$PCGF1KOvCAS_H2AK119$LFC>0] %in% bivalent)/length(lfc.table.list$PCGF1KOvCAS_H2AK119$ENSEMBL[lfc.table.list$PCGF1KOvCAS_H2AK119$LFC>0])
+PCGF1KO_K119_DOWN <- sum(lfc.table.list$MEN1KOvCAS_H3K27me3$ENSEMBL[lfc.table.list$MEN1KOvCAS_H3K27me3$LFC<0] %in% bivalent)/length(lfc.table.list$PCGF1KOvCAS_H2AK119$ENSEMBL[lfc.table.list$PCGF1KOvCAS_H2AK119$LFC<0])
+
+pdf(file = file.path(plots.dir, "Barplot_bivalent_proportion_H2AK119_fip_lfc.pdf"), width = 6, height = 6)
+par(mar = c(4, 8, 2, 4))
+barplot(
+  c(PCGF1KO_K119_DOWN, PCGF1KO_K119_UP, EEDKO_K119_DOWN, EEDKO_K119_UP, MEN1KO_K119_DOWN, MEN1KO_K119_UP), 
+  las = 2, 
+  main = "Bivalent proportion of up/down genes", 
+  names.arg = c("PCGF1KO_DOWN", "PCGF1KO_UP", "EEDKO_DOWN", "EEDKO_UP", "MEN1KO_DOWN", "MEN1KO_UP"),
+  col = c("firebrick1", "dodgerblue"),
+  horiz = TRUE
+  )
+dev.off()
+```
+
+# make corr plot with K4 and K27 for each KO (in each gene group)
+```{r}
+library(corrplot)
+
+# start with all KOs in the same plot, cannot do EED since no K27
+# use full normalised frags in peaks matrix, annotate and then collapse genes
+chr.pos <- strsplit2(rownames(countsNorm), ":")
+countsNorm$Chr <- chr.pos[,1]
+start.end <- strsplit2(chr.pos[,2], "-")
+countsNorm$Start <- as.numeric(start.end[,1])
+countsNorm$End <- as.numeric(start.end[,2])
+
+# make genomic ranges object for annotation
+gr.norm <- with(countsNorm, GRanges(Chr, IRanges(start=Start, end=End)))
+seqlevelsStyle(gr.norm) <- "UCSC"
+norm.counts.ann <- annotatePeak(gr.norm, TxDb = txdb, annoDb = "org.Hs.eg.db")
+norm.counts.ann <- as.data.frame(norm.counts.ann)
+norm.counts.table <- cbind(countsNorm, norm.counts.ann)
+# lose superfluous columns and condense ann names for introns and exons
+norm.counts.table <- norm.counts.table[, -c(15:19, 26:27)]
+intron <- which(substr(norm.counts.table$annotation, 1, 6) == "Intron")
+norm.counts.table$annotation[intron] <- "Intron"
+exon <- which(substr(norm.counts.table$annotation, 1, 4) == "Exon")
+norm.counts.table$annotation[exon] <- "Exon"
+
+write.table(
+	norm.counts.table,
+	file.path(fip.dir, 'NormCounts_cnrt_macs_peaks_fip_ann.txt'),
+	sep = '\t',
+	col.names = TRUE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+# limit to regions of interest and keep only counts from samples of interest and ensg
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+nc.table <- norm.counts.table[norm.counts.table$annotation %in% keep, c(2, 3, 7, 8, 10, 11, 22)]
+# make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+nc.table <- nc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+nc.table <- as.data.frame(nc.table[-which(is.na(nc.table$ENSEMBL)), ])
+
+# get correlation of fip for each gene group separately
+cor.data <- cor(nc.table)
+not.men.not.bi.cor <- cor(nc.table[nc.table$ENSEMBL %in% not.men.not.bi.data$ENSEMBL,2:7])
+men.bi.cor <- cor(nc.table[nc.table$ENSEMBL %in% men.bi.data$ENSEMBL,2:7])
+
+# make separate cor plot for each group of genes
+corrplot(cor.data, order = "hclust")
+corrplot(not.men.not.bi.cor, order = "hclust")
+corrplot(men.bi.cor, order = "hclust")
+### too much correlation within marks to show anything meaningful with these, moving on 
+```
+
+# plots with C&T bivalent genes
+```{r}
+for(comp.i in 1:length(k4.comps)){
+  lfc.table <- fread(file.path(fip.dir, paste0(k4.comps[comp.i], '_cnrt_macs_peaks_fip_lfc_ann_table.txt')))
+  # limit to TSS +/- 500bp
+  lfc.table <- subset(lfc.table, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_", k4.comps[comp.i], "_cnrt_macs_peaks_menin_bivalent_boxplot.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(k4.comps[comp.i], " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+for(comp.i in 1:length(k27.comps)){
+  lfc.table <- fread(file.path(fip.dir, paste0(k27.comps[comp.i], '_cnrt_macs_peaks_fip_lfc_ann_table.txt')))
+  # tried w/o limiting to TSS and actually looks better at TSS so left same as k4
+  # limit to TSS +/- 500bp
+  lfc.table <- subset(lfc.table, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(plots.dir, paste0("Boxplot_", k27.comps[comp.i], "_cnrt_macs_peaks_menin_bivalent_boxplot.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(k27.comps[comp.i], " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+# make barplots of proportion up/downregulated for each KO for K119
+MEN1KO_K119_UP <- sum(lfc.table.list$MEN1KOvCAS_H2AK119$SYMBOL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC>0] %in% bivalent$SYMBOL)/length(lfc.table.list$MEN1KOvCAS_H2AK119$SYMBOL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC>0])
+MEN1KO_K119_DOWN <- sum(lfc.table.list$MEN1KOvCAS_H2AK119$SYMBOL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC<0] %in% bivalent$SYMBOL)/length(lfc.table.list$MEN1KOvCAS_H2AK119$SYMBOL[lfc.table.list$MEN1KOvCAS_H2AK119$LFC<0])
+EEDKO_K119_UP <- sum(lfc.table.list$EEDKOvCAS_H2AK119$SYMBOL[lfc.table.list$EEDKOvCAS_H2AK119$LFC>0] %in% bivalent$SYMBOL)/length(lfc.table.list$EEDKOvCAS_H2AK119$SYMBOL[lfc.table.list$EEDKOvCAS_H2AK119$LFC>0])
+EEDKO_K119_DOWN <- sum(lfc.table.list$EEDKOvCAS_H2AK119$SYMBOL[lfc.table.list$EEDKOvCAS_H2AK119$LFC<0] %in% bivalent$SYMBOL)/length(lfc.table.list$EEDKOvCAS_H2AK119$SYMBOL[lfc.table.list$EEDKOvCAS_H2AK119$LFC<0])
+PCGF1KO_K119_UP <- sum(lfc.table.list$PCGF1KOvCAS_H2AK119$SYMBOL[lfc.table.list$PCGF1KOvCAS_H2AK119$LFC>0] %in% bivalent$SYMBOL)/length(lfc.table.list$PCGF1KOvCAS_H2AK119$SYMBOL[lfc.table.list$PCGF1KOvCAS_H2AK119$LFC>0])
+PCGF1KO_K119_DOWN <- sum(lfc.table.list$MEN1KOvCAS_H3K27me3$SYMBOL[lfc.table.list$MEN1KOvCAS_H3K27me3$LFC<0] %in% bivalent$SYMBOL)/length(lfc.table.list$PCGF1KOvCAS_H2AK119$SYMBOL[lfc.table.list$PCGF1KOvCAS_H2AK119$LFC<0])
+
+pdf(file = file.path(plots.dir, "Barplot_bivalent_proportion_H2AK119_fip_lfc.pdf"), width = 6, height = 6)
+par(mar = c(4, 8, 2, 4))
+barplot(
+  c(PCGF1KO_K119_DOWN, PCGF1KO_K119_UP, EEDKO_K119_DOWN, EEDKO_K119_UP, MEN1KO_K119_DOWN, MEN1KO_K119_UP), 
+  las = 2, 
+  main = "Bivalent proportion of up/down genes", 
+  names.arg = c("PCGF1KO_DOWN", "PCGF1KO_UP", "EEDKO_DOWN", "EEDKO_UP", "MEN1KO_DOWN", "MEN1KO_UP"),
+  col = c("firebrick1", "dodgerblue"),
+  horiz = TRUE
+  )
+dev.off()
+```
+
+
+# use normalised stringent control peaks from SEACR output for diffbind to get LFC
+```{r}
+# set and make dir
+db.dir <- file.path(project.dir, "diffbind")
+dir.create(db.dir)
+
+# read in diffbind stylized sample sheet
+samples <- read.csv(file.path(sample.dir, 'diffbind_sample_sheet_220201.csv'), stringsAsFactors = FALSE)
+
+# get db peakset for each histone mark separately as not expected to be in common
+marks <- c("H3K4me3", "H3K27me3", "H2AK119")
+
+peakset.list <- list()
+for(mark in marks){
+    
+  # make db object from sample sheet
+  db.samples <- dba(sampleSheet = samples[samples$Factor == mark,])
+  # add sample names to db object
+  db.samples$class[1,] <- paste0(db.samples$samples$Condition, "_", db.samples$samples$Factor)
+  
+  # count reads and calculate affinity scores
+  db.counts <- dba.count(db.samples, bUseSummarizeOverlaps = TRUE, bScaleControl = FALSE)
+  # add names to peaks list
+  names(db.counts$peaks) <- paste0(db.samples$samples$Condition, "_", db.samples$samples$Factor)
+  
+  # add peakset to list
+  for(peakset in names(db.counts$peaks)){
+    peakset.list[[peakset]] <- db.counts$peaks[[peakset]]
+  }
+}
+
+# set desired comparisons
+comps <- list(
+	"MEN1KOvCAS_H3K4me3" = c("CAS_H3K4me3", "MEN1ko_H3K4me3"),
+	"EEDKOvCAS_H3K4me3" = c("CAS_H3K4me3", "EEDko_H3K4me3"),
+	"PCGF1KOvCAS_H3K4me3" = c("CAS_H3K4me3", "PCGF1ko_H3K4me3"),
+	"MEN1KOvCAS_H3K27me3" = c("CAS_H3K27me3", "MEN1ko_H3K27me3"),
+	"PCGF1KOvCAS_H3K27me3" = c("CAS_H3K27me3", "PCGF1ko_H3K27me3"),
+	"MEN1KOvCAS_H2AK119" = c("CAS_H2AK119", "MEN1ko_H2AK119"),
+	"EEDKOvCAS_H2AK119" = c("CAS_H2AK119", "EEDko_H2AK119"),
+	"PCGF1KOvCAS_H2AK119" = c("CAS_H2AK119", "PCGF1ko_H2AK119")
+)
+
+# get lfc peaks table for each comparison
+for(comp.i in 1:length(comps)){
+
+	# get each comparison to specify peaks matrix
+	comp.x <- comps[[comp.i]][1]
+	comp.y <- comps[[comp.i]][2]
+
+	# ensure peak in both samples 
+	comp.table <- merge(
+	  peakset.list[[comp.x]], 
+		peakset.list[[comp.y]], 
+		by.x = c('Chr', 'Start', 'End'),
+		by.y = c('Chr', 'Start', 'End')
+		)
+
+	# get fold change between specified samples
+	comp.fc <- log2(comp.table$RPKM.y/comp.table$RPKM.x)
+	comp.fc.table <- cbind(comp.table[1:3], comp.fc)
+
+	# make genomic ranges object for annotation
+	gr.fc.table <- with(comp.fc.table, GRanges(Chr, IRanges(start=Start, end=End)))
+	gr.fc.table$LFC <- comp.fc.table$comp.fc
+	seqlevelsStyle(gr.fc.table) <- "UCSC"
+	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+	lfc.ann.table <- as.data.frame(lfc.ann)
+
+	write.table(
+		lfc.ann.table,
+		file.path(db.dir, paste0(names(comps[comp.i]), '_diff_0.01_peaks_LFC_table.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+	
+	# subset for menin genes and write out
+	menin <- read.table("/dawson_genomics/Projects/Menin/ChIPseq_200320_NB501056_0470_AH5NJJBGXF/scripts/MeninGenes.bed")
+	menin.lfc.ann.table <- subset(lfc.ann.table, ENSEMBL %in% menin$V4)
+	write.table(
+		menin.lfc.ann.table,
+		file.path(db.dir, paste0(names(comps[comp.i]), '_Menin_diff_top0.01_peaks_LFC_table.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+}
+```
+
+# use bdgdiff to compare peaks, using output from cnrtools macs broadpeaks
+```{bash}
+# run for cnrtools dir
+cd cnr_tools_wd
+mkdir bdgdiff_macs2_broad
+
+# no d1/d2 needed for samples run with cnrtools
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-EEDko-H2AK119_S12_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-EEDko-H2AK119_S12_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H2AK119_S10_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H2AK119_S10_aligned_reads_control_lambda.bdg diff_EEDKOvCAS_H2AK119 bdgdiff_macs2_broad
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-MEN1ko-H2AK119_S11_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-MEN1ko-H2AK119_S11_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H2AK119_S10_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H2AK119_S10_aligned_reads_control_lambda.bdg diff_MEN1KOvCAS_H2AK119 bdgdiff_macs2_broad
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-PCGF1ko-H2AK119_S13_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-PCGF1ko-H2AK119_S13_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H2AK119_S10_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H2AK119_S10_aligned_reads_control_lambda.bdg diff_PCGF1KOvCAS_H2AK119 bdgdiff_macs2_broad
+
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-EEDko-H3K27me3_S8_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-EEDko-H3K27me3_S8_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K27me3_S6_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K27me3_S6_aligned_reads_control_lambda.bdg diff_EEDKOvCAS_H3K27me3 bdgdiff_macs2_broad
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-MEN1ko-H3K27me3_S7_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-MEN1ko-H3K27me3_S7_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K27me3_S6_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K27me3_S6_aligned_reads_control_lambda.bdg diff_MEN1KOvCAS_H3K27me3 bdgdiff_macs2_broad
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-PCGF1ko-H3K27me3_S9_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-PCGF1ko-H3K27me3_S9_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K27me3_S6_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K27me3_S6_aligned_reads_control_lambda.bdg diff_PCGF1KOvCAS_H3K27me3 bdgdiff_macs2_broad
+
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-EEDko-H3K4me3_S4_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-EEDko-H3K4me3_S4_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K4me3_S2_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K4me3_S2_aligned_reads_control_lambda.bdg diff_EEDKOvCAS_H3K4me3 bdgdiff_macs2_broad
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K4me3_S2_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K4me3_S2_aligned_reads_control_lambda.bdg diff_MEN1KOvCAS_H3K4me3 bdgdiff_macs2_broad
+
+sbatch ../scripts/bdgdiff.sbatch macs2.broad.all.frag.aug18/MHC-CSCT03-K562-PCGF1ko-H3K4me3_S5_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-PCGF1ko-H3K4me3_S5_aligned_reads_control_lambda.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K4me3_S2_aligned_reads_treat_pileup.bdg macs2.broad.all.frag.aug18/MHC-CSCT03-K562-CAS-H3K4me3_S2_aligned_reads_control_lambda.bdg diff_PCGF1KOvCAS_H3K4me3 bdgdiff_macs2_broad
+```
+
+# annotate diff peaks files
+```{r}
+cnr.diff.dir <- file.path(cnrt.dir, "bdgdiff_macs2_broad")
+
+# set comparisons and conditions for file names
+conds <- c("common", "cond1", "cond2")
+
+for(comp.i in 1:length(comps)){
+  for(cond.j in 1:3){
+    # read in each file to annotate, rewrite, subset and write
+    diff.table <- fread(file.path(cnr.diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_", conds[cond.j], ".bed")), skip = 1)
+  	# make genomic ranges object for annotation
+  	gr.diff <- with(diff.table, GRanges(V1, IRanges(start = V2, end = V3)))
+  	gr.diff$logLikelihood <- diff.table$V5
+  	seqlevelsStyle(gr.diff) <- "UCSC"
+  	diff.ann <- annotatePeak(gr.diff, TxDb = txdb, annoDb = "org.Hs.eg.db")
+  	diff.ann.table <- as.data.frame(diff.ann)
+  	
+  	# rename exons and introns for ease of selection
+  	diff.ann.table <- diff.table
+  	intron <- which(substr(diff.ann.table$annotation, 1, 6) == "Intron")
+  	diff.ann.table$annotation[intron] <- "Intron"
+  	exon <- which(substr(diff.ann.table$annotation, 1, 4) == "Exon")
+  	diff.ann.table$annotation[exon] <- "Exon"
+  
+  	write.table(
+  		diff.ann.table,
+  		file.path(cnr.diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_", conds[cond.j], ".bed")),
+  		sep = '\t',
+  		col.names = TRUE,
+  		row.names = FALSE,
+  		quote = FALSE
+  		)
+  }
+}
+```
+
+# make plots with CnRtools output bdgdiff data
+```{r}
+for(comp in k4.comps){
+  bar.data <- data.table(matrix(nrow = 2, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond2.bed")))
+  # limit to TSS +/- 500bp
+  up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(nrow(not.men.not.bi.up)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)), nrow(not.men.not.bi.down)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)))
+  bar.data$nmb <- rbind(nrow(not.men.bi.up)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)), nrow(not.men.bi.down)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)))
+  bar.data$mnb <- rbind(nrow(men.not.bi.up)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)), nrow(men.not.bi.down)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)))
+  bar.data$mb <- rbind(nrow(men.bi.up)/sum(nrow(men.bi.up), nrow(men.bi.down)), nrow(men.bi.down)/sum(nrow(men.bi.up), nrow(men.bi.down)))
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("prop_bar_", comp, ".pdf")))
+  par(mar = c(5, 4, 2, 6), xpd = TRUE)
+  bp <- barplot(
+  bar.matrix, 
+  col = c("indianred1", "dodgerblue"), 
+  border = "white", 
+  xlab = comp, 
+  ylab = "Proportion",
+  bty = "L"
+  )
+  # text on top (down peaks)
+  text(bp, 1, c(nrow(not.men.not.bi.down), nrow(not.men.bi.down), nrow(men.not.bi.down), nrow(men.bi.down)), cex = 1.2, pos = 1)
+  # text on bottom (up peaks)
+  text(bp, 0, c(nrow(not.men.not.bi.up), nrow(not.men.bi.up), nrow(men.not.bi.up), nrow(men.bi.up)), cex = 1.2, pos = 3)
+  legend("topright", legend = c("Up", "Down"), fill = c("indianred1", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+
+for(comp in k27.comps){
+  bar.data <- data.table(matrix(nrow = 2, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond2.bed")))
+  # tried w/o limiting to TSS and actually looks better at TSS so left same as k4
+  # limit to TSS +/- 500bp
+  #up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  #down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(nrow(not.men.not.bi.up)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)), nrow(not.men.not.bi.down)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)))
+  bar.data$nmb <- rbind(nrow(not.men.bi.up)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)), nrow(not.men.bi.down)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)))
+  bar.data$mnb <- rbind(nrow(men.not.bi.up)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)), nrow(men.not.bi.down)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)))
+  bar.data$mb <- rbind(nrow(men.bi.up)/sum(nrow(men.bi.up), nrow(men.bi.down)), nrow(men.bi.down)/sum(nrow(men.bi.up), nrow(men.bi.down)))
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("prop_bar_", comp, ".pdf")))
+  par(mar = c(5, 4, 2, 6), xpd = TRUE)
+  bp <- barplot(
+  bar.matrix, 
+  col = c("indianred1", "dodgerblue"), 
+  border = "white", 
+  xlab = comp, 
+  ylab = "Proportion",
+  bty = "L"
+  )
+  # text on top (down peaks)
+  text(bp, 1, c(nrow(not.men.not.bi.down), nrow(not.men.bi.down), nrow(men.not.bi.down), nrow(men.bi.down)), cex = 1.2, pos = 1)
+  # text on bottom (up peaks)
+  text(bp, 0, c(nrow(not.men.not.bi.up), nrow(not.men.bi.up), nrow(men.not.bi.up), nrow(men.bi.up)), cex = 1.2, pos = 3)
+  legend("topright", legend = c("Up", "Down"), fill = c("indianred1", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+
+# make barplots of proportion up/downregulated for each KO for K119
+MEN1KO_K119_UP <- fread(file.path(cnr.diff.dir, paste0("diff_MEN1KOvCAS_H2AK119_c3.0_cond1.bed")))
+PROP_MEN1KO_K119_UP <- sum(MEN1KO_K119_UP$SYMBOL %in% bivalent$SYMBOL)/nrow(MEN1KO_K119_UP)
+MEN1KO_K119_DOWN <- fread(file.path(cnr.diff.dir, paste0("diff_MEN1KOvCAS_H2AK119_c3.0_cond2.bed")))
+PROP_MEN1KO_K119_DOWN <- sum(MEN1KO_K119_DOWN$SYMBOL %in% bivalent$SYMBOL)/nrow(MEN1KO_K119_DOWN)
+EEDKO_K119_UP <- fread(file.path(cnr.diff.dir, paste0("diff_EEDKOvCAS_H2AK119_c3.0_cond1.bed")))
+PROP_EEDKO_K119_UP <- sum(EEDKO_K119_UP$SYMBOL %in% bivalent$SYMBOL)/nrow(EEDKO_K119_UP)
+EEDKO_K119_DOWN <- fread(file.path(cnr.diff.dir, paste0("diff_EEDKOvCAS_H2AK119_c3.0_cond2.bed")))
+PROP_EEDKO_K119_DOWN<- sum(EEDKO_K119_DOWN$SYMBOL %in% bivalent$SYMBOL)/nrow(EEDKO_K119_DOWN)
+PCGF1KO_K119_UP <- fread(file.path(cnr.diff.dir, paste0("diff_PCGF1KOvCAS_H2AK119_c3.0_cond1.bed")))
+PROP_PCGF1KO_K119_UP <- sum(PCGF1KO_K119_UP$SYMBOL %in% bivalent$SYMBOL)/nrow(PCGF1KO_K119_UP)
+PCGF1KO_K119_DOWN <- fread(file.path(cnr.diff.dir, paste0("diff_PCGF1KOvCAS_H2AK119_c3.0_cond2.bed")))
+PROP_PCGF1KO_K119_DOWN <- sum(PCGF1KO_K119_DOWN$SYMBOL %in% bivalent$SYMBOL)/nrow(PCGF1KO_K119_DOWN)
+
+pdf(file = file.path(plots.dir, "Barplot_bivalent_proportion_H2AK119_fip_lfc.pdf"), width = 6, height = 6)
+par(mar = c(4, 8, 2, 4))
+barplot(
+  c(PCGF1KO_K119_DOWN, PCGF1KO_K119_UP, EEDKO_K119_DOWN, EEDKO_K119_UP, MEN1KO_K119_DOWN, MEN1KO_K119_UP), 
+  las = 2, 
+  main = "Bivalent proportion of up/down genes", 
+  names.arg = c("PCGF1KO_DOWN", "PCGF1KO_UP", "EEDKO_DOWN", "EEDKO_UP", "MEN1KO_DOWN", "MEN1KO_UP"),
+  col = c("firebrick1", "dodgerblue"),
+  horiz = TRUE
+  )
+dev.off()
+```
+
+# barplots with common genes as well
+```{r}
+for(comp.i in 1:length(k4.comps)){
+  bar.data <- data.table(matrix(nrow = 3, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k4.comps[comp.i], "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k4.comps[comp.i], "_c3.0_cond2.bed")))
+  common <- fread(file.path(cnr.diff.dir, paste0("diff_", k4.comps[comp.i], "_c3.0_common.bed")))
+  # limit to TSS +/- 500bp
+  up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  common <- subset(common, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.common <- common[common$ENSEMBL %in% menin$V4,]
+  not.men.common <- common[!(common$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.common <- men.common[men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.common <- men.common[!(men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.common <- not.men.common[not.men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.common <- not.men.common[!(not.men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    nrow(not.men.not.bi.up)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common)),
+    nrow(not.men.not.bi.common)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common)),
+    nrow(not.men.not.bi.down)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common))
+    )
+  bar.data$nmb <- rbind(
+    nrow(not.men.bi.up)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common)),
+    nrow(not.men.bi.common)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common)),
+    nrow(not.men.bi.down)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common))
+    )
+  bar.data$mnb <- rbind(
+    nrow(men.not.bi.up)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common)),
+    nrow(men.not.bi.common)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common)), 
+    nrow(men.not.bi.down)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common))
+    )
+  bar.data$mb <- rbind(
+    nrow(men.bi.up)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common)),
+    nrow(men.bi.common)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common)),
+    nrow(men.bi.down)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common))
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "common", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("3cat_prop_bar_", k4.comps[comp.i], ".pdf")))
+  par(mar = c(7, 4, 1, 6), xpd = TRUE)
+  barplot(
+    bar.matrix, 
+    col = c("indianred1", "grey", "dodgerblue"), 
+    border = "white", 
+    xlab = "", 
+    ylab = "Proportion", 
+    bty = "L"
+    )
+  mtext(paste0("\n", k4.comps[comp.i], "\n#up=", nrow(up.peaks), " #common=", nrow(common), " #down=", nrow(down.peaks)), side=1, line=5)
+  legend("topright", legend = c("KO", "Common", "Control"), fill = c("indianred1", "grey", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+
+for(comp.i in 1:length(k27.comps)){
+  bar.data <- data.table(matrix(nrow = 3, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k27.comps[comp.i], "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k27.comps[comp.i], "_c3.0_cond2.bed")))
+  common <- fread(file.path(cnr.diff.dir, paste0("diff_", k27.comps[comp.i], "_c3.0_common.bed")))
+  # limit to TSS +/- 500bp
+  #up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  #down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  #common <- subset(common, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.common <- common[common$ENSEMBL %in% menin$V4,]
+  not.men.common <- common[!(common$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.common <- men.common[men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.common <- men.common[!(men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.common <- not.men.common[not.men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.common <- not.men.common[!(not.men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    nrow(not.men.not.bi.up)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common)),
+    nrow(not.men.not.bi.common)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common)),
+    nrow(not.men.not.bi.down)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common))
+    )
+  bar.data$nmb <- rbind(
+    nrow(not.men.bi.up)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common)),
+    nrow(not.men.bi.common)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common)),
+    nrow(not.men.bi.down)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common))
+    )
+  bar.data$mnb <- rbind(
+    nrow(men.not.bi.up)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common)),
+    nrow(men.not.bi.common)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common)), 
+    nrow(men.not.bi.down)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common))
+    )
+  bar.data$mb <- rbind(
+    nrow(men.bi.up)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common)),
+    nrow(men.bi.common)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common)),
+    nrow(men.bi.down)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common))
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "common", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("3cat_prop_bar_", k27.comps[comp.i], ".pdf")))
+  par(mar = c(7, 4, 1, 6), xpd = TRUE)
+  barplot(
+    bar.matrix, 
+    col = c("indianred1", "grey", "dodgerblue"), 
+    border = "white", 
+    xlab = "", 
+    ylab = "Proportion", 
+    bty = "L"
+    )
+  mtext(paste0("\n", k27.comps[comp.i], "\n#up=", nrow(up.peaks), " #common=", nrow(common), " #down=", nrow(down.peaks)), side=1, line=5)
+  legend("topright", legend = c("KO", "Common", "Control"), fill = c("indianred1", "grey", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+```
+
+# barplots with common genes as well
+```{r}
+for(comp.i in 1:length(k4.comps)){
+  bar.data <- data.table(matrix(nrow = 3, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k4.comps[comp.i], "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k4.comps[comp.i], "_c3.0_cond2.bed")))
+  common <- fread(file.path(cnr.diff.dir, paste0("diff_", k4.comps[comp.i], "_c3.0_common.bed")))
+  # limit to TSS +/- 500bp
+  up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  common <- subset(common, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.common <- common[common$ENSEMBL %in% menin$V4,]
+  not.men.common <- common[!(common$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.common <- men.common[men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.common <- men.common[!(men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.common <- not.men.common[not.men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.common <- not.men.common[!(not.men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    nrow(not.men.not.bi.up),
+    nrow(not.men.not.bi.common),
+    nrow(not.men.not.bi.down)
+    )
+  bar.data$nmb <- rbind(
+    nrow(not.men.bi.up),
+    nrow(not.men.bi.common),
+    nrow(not.men.bi.down)
+    )
+  bar.data$mnb <- rbind(
+    nrow(men.not.bi.up),
+    nrow(men.not.bi.common), 
+    nrow(men.not.bi.down)
+    )
+  bar.data$mb <- rbind(
+    nrow(men.bi.up),
+    nrow(men.bi.common),
+    nrow(men.bi.down)
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "common", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("bar_", k4.comps[comp.i], ".pdf")))
+  par(mar = c(7, 4, 1, 6), xpd = TRUE)
+  bp <- barplot(
+    bar.matrix, 
+    col = c("indianred1", "grey", "dodgerblue"), 
+    border = "white", 
+    xlab = k4.comps[comp.i], 
+#    ylab = "Proportion",
+    beside = TRUE,
+    bty = "L"
+    )
+  text(bp, 0, bar.matrix, cex = 0.7, pos = 3)
+  legend("topright", legend = c("KO", "Common", "Control"), fill = c("indianred1", "grey", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+
+for(comp.i in 1:length(k27.comps)){
+  bar.data <- data.table(matrix(nrow = 3, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k27.comps[comp.i], "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", k27.comps[comp.i], "_c3.0_cond2.bed")))
+  common <- fread(file.path(cnr.diff.dir, paste0("diff_", k27.comps[comp.i], "_c3.0_common.bed")))
+  # limit to TSS +/- 500bp
+  #up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  #down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  #common <- subset(common, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.common <- common[common$ENSEMBL %in% menin$V4,]
+  not.men.common <- common[!(common$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.common <- men.common[men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.common <- men.common[!(men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.common <- not.men.common[not.men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.common <- not.men.common[!(not.men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    nrow(not.men.not.bi.up),
+    nrow(not.men.not.bi.common),
+    nrow(not.men.not.bi.down)
+    )
+  bar.data$nmb <- rbind(
+    nrow(not.men.bi.up),
+    nrow(not.men.bi.common),
+    nrow(not.men.bi.down)
+    )
+  bar.data$mnb <- rbind(
+    nrow(men.not.bi.up),
+    nrow(men.not.bi.common), 
+    nrow(men.not.bi.down)
+    )
+  bar.data$mb <- rbind(
+    nrow(men.bi.up),
+    nrow(men.bi.common),
+    nrow(men.bi.down)
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "common", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("bar_", k27.comps[comp.i], ".pdf")))
+  par(mar = c(7, 4, 1, 6), xpd = TRUE)
+  bp <- barplot(
+    bar.matrix, 
+    col = c("indianred1", "grey", "dodgerblue"), 
+    border = "white", 
+    xlab = k27.comps[comp.i], 
+#    ylab = "Proportion",
+    beside = TRUE,
+    bty = "L"
+    )
+  text(bp, 0, bar.matrix, cex = 0.7, pos = 3)
+  legend("topright", legend = c("KO", "Common", "Control"), fill = c("indianred1", "grey", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+```
+
+# get Dm Bam flagstats for normalisation
+```{bash}
+module load samtools/1.8
+
+MHC-CSCT03-K562-CAS-H2AK119_S10.sort.bam
+5740267 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-CAS-H3K27me3_S6.sort.bam
+14594315 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-CAS-H3K4me3_S2.sort.bam
+12965415 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-CAS-IgG_S1.sort.bam
+3220 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-EEDko-H2AK119_S12.sort.bam
+5527040 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-EEDko-H3K27me3_S8.sort.bam
+2356 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-EEDko-H3K4me3_S4.sort.bam
+8482089 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-MEN1ko-H2AK119_S11.sort.bam
+6526423 + 0 in total (QC-passed reads + QC-failed reads)
+
+9723317 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam
+12270993 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-PCGF1ko-H2AK119_S13.sort.bam
+5707170 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-PCGF1ko-H3K27me3_S9.sort.bam
+9291511 + 0 in total (QC-passed reads + QC-failed reads)
+
+MHC-CSCT03-K562-PCGF1ko-H3K4me3_S5.sort.bam
+9549439 + 0 in total (QC-passed reads + QC-failed reads)
+
+```
+
+# make gene profile and heatmap plots on RPCG norm data
+```{bash}
+# from RPCG BW dir
+cd BW_RPGC_norm/
+
+# submitted to cluster as:
+sbatch ../../scripts/DeeptoolsBWMatrix.sbatch
+
+# commands submitted in sbatch
+#computeMatrix scale-regions -S \
+#MHC-CSCT03-K562-CAS-H2AK119_S10.bw MHC-CSCT03-K562-EEDko-H2AK119_S12.bw MHC-CSCT03-K562-MEN1ko-H2AK119_S11.bw MHC-CSCT03-K562-PCGF1ko-H2AK119_S13.bw MHC-CSCT03-K562-CAS-H3K27me3_S6.bw MHC-CSCT03-K562-EEDko-H3K27me3_S8.bw MHC-CSCT03-K562-MEN1ko-H3K27me3_S7.bw MHC-CSCT03-K562-PCGF1ko-H3K27me3_S9.bw MHC-CSCT03-K562-CAS-H3K4me3_S2.bw MHC-CSCT03-K562-EEDko-H3K4me3_S4.bw MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.bw MHC-CSCT03-K562-PCGF1ko-H3K4me3_S5.bw -R /data/reference/dawson_labs/bed_files/Hg19/Hg19EnsGene1kbProm.bed -a 3000 -b 3000 -m 5000 -o CnTmatrix_CUTandTAG_RPGCnorm_1kPromAllGenes.gz
+
+#plotProfile -m CnTmatrix_CUTandTAG_RPGCnorm_1kPromAllGenes.gz --perGroup --samplesLabel CAS-H2AK119 EEDko-H2AK119 MEN1ko-H2AK119 PCGF1ko-H2AK119 CAS-H3K27me3 EEDko-H3K27me3 MEN1ko-H3K27me3 PCGF1ko-H3K27me3 CAS-H3K4me3 EEDko-H3K4me3 MEN1ko-H3K4me3 PCGF1ko-H3K4me3 -o ../../plots/Profile_CnT_RPGCnorm_1kbPromAllGenes.pdf --plotTitle "Cut&Tag All genes"
+
+#plotHeatmap -m CnTmatrix_CUTandTAG_RPGCnorm_1kPromAllGenes.gz --sortUsing sum --boxAroundHeatmaps no --samplesLabel CAS-H2AK119 EEDko-H2AK119 MEN1ko-H2AK119 PCGF1ko-H2AK119 CAS-H3K27me3 EEDko-H3K27me3 MEN1ko-H3K27me3 PCGF1ko-H3K27me3 CAS-H3K4me3 EEDko-H3K4me3 MEN1ko-H3K4me3 PCGF1ko-H3K4me3 --colorMap Reds Reds Reds Reds Blues Blues Blues Blues Oranges Oranges Oranges Oranges -o ../../plots/Heatmap_CnT_RPGCnorm_1KbPromAllGenes.pdf --plotTitle "Cut&Tag All genes"
+
+# also run separately for each mark
+sbatch ../../scripts/DTMatrixK119.sbatch
+# resubmitted without EDDko_K27 because of so few reads
+sbatch ../../scripts/DTMatrixK27.sbatch
+sbatch ../../scripts/DTMatrixK4.sbatch
+
+# redo heatmap colours
+sbatch ../../scripts/DTHeat.sbatch
+```
+
+# make barplots of proportion up/down regulated for each KO per mark in CSCT05
+```{r}
+# loop through K119 and K4 marks and make a plot for each
+for(mark in c("H2AK119", "H3K4me3")){
+  # get up and down peaks per macs for each KO, then divide into bivalent and not
+  men.up <- fread(file.path(cnr.diff.dir, paste0("diff_MEN1KOvCAS_", mark, "_c3.0_cond1.bed")))
+  men.down <- fread(file.path(cnr.diff.dir, paste0("diff_MEN1KOvCAS_", mark, "_c3.0_cond2.bed")))
+  pcgf.up <- fread(file.path(cnr.diff.dir, paste0("diff_PCGF1KOvCAS_", mark, "_c3.0_cond1.bed")))
+  pcgf.down <- fread(file.path(cnr.diff.dir, paste0("diff_PCGF1KOvCAS_", mark, "_c3.0_cond2.bed")))
+  eed.up <- fread(file.path(cnr.diff.dir, paste0("diff_EEDKOvCAS_", mark, "_c3.0_cond1.bed")))
+  eed.down <- fread(file.path(cnr.diff.dir, paste0("diff_EEDKOvCAS_", mark, "_c3.0_cond2.bed")))
+  
+  # limit each to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  men.up <- men.up[men.up$annotation %in% keep, ]
+  men.down <- men.down[men.down$annotation %in% keep, ]
+  pcgf.up <- pcgf.up[pcgf.up$annotation %in% keep, ]
+  pcgf.down <- pcgf.down[pcgf.down$annotation %in% keep, ]
+  eed.up <- eed.up[eed.up$annotation %in% keep, ]
+  eed.down <- eed.down[eed.down$annotation %in% keep, ]
+  
+  # get proportion for each group
+  men1.not.men.not.bi.up <- men.up[which(!(men.up$ENSEMBL %in% menin$V4) & !(men.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  men1.not.men.not.bi.up.prop <- nrow(unique(men1.not.men.not.bi.up))/length(unique(men.up$ENSEMBL))
+  men1.not.men.not.bi.down <- men.down[which(!(men.down$ENSEMBL %in% menin$V4) & !(men.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  men1.not.men.not.bi.down.prop <- nrow(unique(men1.not.men.not.bi.down))/length(unique(men.down$ENSEMBL))
+  pcgf.not.men.not.bi.up <- pcgf.up[which(!(pcgf.up$ENSEMBL %in% menin$V4) & !(pcgf.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  pcgf.not.men.not.bi.up.prop <- nrow(unique(pcgf.not.men.not.bi.up))/length(unique(pcgf.up$ENSEMBL))
+  pcgf.not.men.not.bi.down <- pcgf.down[which(!(pcgf.down$ENSEMBL %in% menin$V4) & !(pcgf.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  pcgf.not.men.not.bi.down.prop <- nrow(unique(pcgf.not.men.not.bi.down))/length(unique(pcgf.down$ENSEMBL))
+  eed.not.men.not.bi.up <- eed.up[which(!(eed.up$ENSEMBL %in% menin$V4) & !(eed.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  eed.not.men.not.bi.up.prop <- nrow(unique(eed.not.men.not.bi.up))/length(unique(eed.up$ENSEMBL))
+  eed.not.men.not.bi.down <- eed.down[which(!(eed.down$ENSEMBL %in% menin$V4) & !(eed.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  eed.not.men.not.bi.down.prop <- nrow(unique(eed.not.men.not.bi.down))/length(unique(eed.down$ENSEMBL))
+  
+  men1.not.men.bi.up <- men.up[which(!(men.up$ENSEMBL %in% menin$V4) & men.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  men1.not.men.bi.up.prop <- nrow(unique(men1.not.men.bi.up))/length(unique(men.up$ENSEMBL))
+  men1.not.men.bi.down <- men.down[which(!(men.down$ENSEMBL %in% menin$V4) & men.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  men1.not.men.bi.down.prop <- nrow(unique(men1.not.men.bi.down))/length(unique(men.down$ENSEMBL))
+  pcgf.not.men.bi.up <- pcgf.up[which(!(pcgf.up$ENSEMBL %in% menin$V4) & pcgf.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  pcgf.not.men.bi.up.prop <- nrow(unique(pcgf.not.men.bi.up))/length(unique(pcgf.up$ENSEMBL))
+  pcgf.not.men.bi.down <- pcgf.down[which(!(pcgf.down$ENSEMBL %in% menin$V4) & pcgf.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  pcgf.not.men.bi.down.prop <- nrow(unique(pcgf.not.men.bi.down))/length(unique(pcgf.down$ENSEMBL))
+  eed.not.men.bi.up <- eed.up[which(!(eed.up$ENSEMBL %in% menin$V4) & eed.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  eed.not.men.bi.up.prop <- nrow(unique(eed.not.men.bi.up))/length(unique(eed.up$ENSEMBL))
+  eed.not.men.bi.down <- eed.down[which(!(eed.down$ENSEMBL %in% menin$V4) & eed.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  eed.not.men.bi.down.prop <- nrow(unique(eed.not.men.bi.down))/length(unique(eed.down$ENSEMBL))
+  
+  men1.men.not.bi.up <- men.up[which(men.up$ENSEMBL %in% menin$V4 & !(men.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  men1.men.not.bi.up.prop <- nrow(unique(men1.men.not.bi.up))/length(unique(men.up$ENSEMBL))
+  men1.men.not.bi.down <- men.down[which(men.down$ENSEMBL %in% menin$V4 & !(men.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  men1.men.not.bi.down.prop <- nrow(unique(men1.men.not.bi.down))/length(unique(men.down$ENSEMBL))
+  pcgf.men.not.bi.up <- pcgf.up[which(pcgf.up$ENSEMBL %in% menin$V4 & !(pcgf.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  pcgf.men.not.bi.up.prop <- nrow(unique(pcgf.men.not.bi.up))/length(unique(pcgf.up$ENSEMBL))
+  pcgf.men.not.bi.down <- pcgf.down[which(pcgf.down$ENSEMBL %in% menin$V4 & !(pcgf.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  pcgf.men.not.bi.down.prop <- nrow(unique(pcgf.men.not.bi.down))/length(unique(pcgf.down$ENSEMBL))
+  eed.men.not.bi.up <- eed.up[which(eed.up$ENSEMBL %in% menin$V4 & !(eed.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  eed.men.not.bi.up.prop <- nrow(unique(eed.men.not.bi.up))/length(unique(eed.up$ENSEMBL))
+  eed.men.not.bi.down <- eed.down[which(eed.down$ENSEMBL %in% menin$V4 & !(eed.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+  eed.men.not.bi.down.prop <- nrow(unique(eed.men.not.bi.down))/length(unique(eed.down$ENSEMBL))
+  
+  men1.men.bi.up <- men.up[which(men.up$ENSEMBL %in% menin$V4 & men.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  men1.men.bi.up.prop <- nrow(unique(men1.men.bi.up))/length(unique(men.up$ENSEMBL))
+  men1.men.bi.down <- men.down[which(men.down$ENSEMBL %in% menin$V4 & men.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  men1.men.bi.down.prop <- nrow(unique(men1.men.bi.down))/length(unique(men.down$ENSEMBL))
+  pcgf.men.bi.up <- pcgf.up[which(pcgf.up$ENSEMBL %in% menin$V4 & pcgf.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  pcgf.men.bi.up.prop <- nrow(unique(pcgf.men.bi.up))/length(unique(pcgf.up$ENSEMBL))
+  pcgf.men.bi.down <- pcgf.down[which(pcgf.down$ENSEMBL %in% menin$V4 & pcgf.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  pcgf.men.bi.down.prop <- nrow(unique(pcgf.men.bi.down))/length(unique(pcgf.down$ENSEMBL))
+  eed.men.bi.up <- eed.up[which(eed.up$ENSEMBL %in% menin$V4 & eed.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  eed.men.bi.up.prop <- nrow(unique(eed.men.bi.up))/length(unique(eed.up$ENSEMBL))
+  eed.men.bi.down <- eed.down[which(eed.down$ENSEMBL %in% menin$V4 & eed.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+  eed.men.bi.down.prop <- nrow(unique(eed.men.bi.down))/length(unique(eed.down$ENSEMBL))
+  
+  pdf(file = file.path(plots.dir, paste0("Barplot_menin_bivalent_proportion_", mark, "_diffpeaks.pdf")), width = 6, height = 6)
+  par(mar = c(4, 8, 4, 4))
+  #par(mfrow = c(2, 2))
+  barplot(
+    c(eed.not.men.not.bi.down.prop, eed.not.men.not.bi.up.prop, pcgf.not.men.not.bi.down.prop, pcgf.not.men.not.bi.up.prop, men1.not.men.not.bi.down.prop, men1.not.men.not.bi.up.prop), 
+    las = 2, 
+    main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nnon-menin-bound & non-bivalent"), 
+    names.arg = c("EEDKO down", "EEDKO up", "PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+    col = c("firebrick1", "dodgerblue"),
+    xlim = c(0, 1),
+    horiz = TRUE
+    )
+  barplot(
+    c(eed.not.men.bi.down.prop, eed.not.men.bi.up.prop, pcgf.not.men.bi.down.prop, pcgf.not.men.bi.up.prop, men1.not.men.bi.down.prop, men1.not.men.bi.up.prop), 
+    las = 2, 
+    main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nnon-menin-bound & bivalent"), 
+    names.arg = c("EEDKO down", "EEDKO up", "PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+    col = c("firebrick1", "dodgerblue"),
+    xlim = c(0, 1),
+    horiz = TRUE
+    )
+  barplot(
+    c(eed.men.not.bi.down.prop, eed.men.not.bi.up.prop, pcgf.men.not.bi.down.prop, pcgf.men.not.bi.up.prop, men1.men.not.bi.down.prop, men1.men.not.bi.up.prop), 
+    las = 2, 
+    main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nmenin-bound & non-bivalent"), 
+    names.arg = c("EEDKO down", "EEDKO up", "PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+    col = c("firebrick1", "dodgerblue"),
+    xlim = c(0, 1),
+    horiz = TRUE
+    )
+  barplot(
+    c(eed.men.bi.down.prop, eed.men.bi.up.prop, pcgf.men.bi.down.prop, pcgf.men.bi.up.prop, men1.men.bi.down.prop, men1.men.bi.up.prop), 
+    las = 2, 
+    main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nmenin-bound & bivalent"), 
+    names.arg = c("EEDKO down", "EEDKO up", "PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+    col = c("firebrick1", "dodgerblue"),
+    xlim = c(0, 1),
+    horiz = TRUE
+    )
+  dev.off()
+}
+
+# now do K27 without EEDKO
+mark <- "H3K27me3"
+men.up <- fread(file.path(cnr.diff.dir, paste0("diff_MEN1KOvCAS_", mark, "_c3.0_cond1.bed")))
+men.down <- fread(file.path(cnr.diff.dir, paste0("diff_MEN1KOvCAS_", mark, "_c3.0_cond2.bed")))
+pcgf.up <- fread(file.path(cnr.diff.dir, paste0("diff_PCGF1KOvCAS_", mark, "_c3.0_cond1.bed")))
+pcgf.down <- fread(file.path(cnr.diff.dir, paste0("diff_PCGF1KOvCAS_", mark, "_c3.0_cond2.bed")))
+
+# limit each to regions of interest
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+men.up <- men.up[men.up$annotation %in% keep, ]
+men.down <- men.down[men.down$annotation %in% keep, ]
+pcgf.up <- pcgf.up[pcgf.up$annotation %in% keep, ]
+pcgf.down <- pcgf.down[pcgf.down$annotation %in% keep, ]
+
+# get proportion for each group
+men1.not.men.not.bi.up <- men.up[which(!(men.up$ENSEMBL %in% menin$V4) & !(men.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+men1.not.men.not.bi.up.prop <- nrow(unique(men1.not.men.not.bi.up))/length(unique(men.up$ENSEMBL))
+men1.not.men.not.bi.down <- men.down[which(!(men.down$ENSEMBL %in% menin$V4) & !(men.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+men1.not.men.not.bi.down.prop <- nrow(unique(men1.not.men.not.bi.down))/length(unique(men.down$ENSEMBL))
+pcgf.not.men.not.bi.up <- pcgf.up[which(!(pcgf.up$ENSEMBL %in% menin$V4) & !(pcgf.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+pcgf.not.men.not.bi.up.prop <- nrow(unique(pcgf.not.men.not.bi.up))/length(unique(pcgf.up$ENSEMBL))
+pcgf.not.men.not.bi.down <- pcgf.down[which(!(pcgf.down$ENSEMBL %in% menin$V4) & !(pcgf.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+pcgf.not.men.not.bi.down.prop <- nrow(unique(pcgf.not.men.not.bi.down))/length(unique(pcgf.down$ENSEMBL))
+
+men1.not.men.bi.up <- men.up[which(!(men.up$ENSEMBL %in% menin$V4) & men.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+men1.not.men.bi.up.prop <- nrow(unique(men1.not.men.bi.up))/length(unique(men.up$ENSEMBL))
+men1.not.men.bi.down <- men.down[which(!(men.down$ENSEMBL %in% menin$V4) & men.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+men1.not.men.bi.down.prop <- nrow(unique(men1.not.men.bi.down))/length(unique(men.down$ENSEMBL))
+pcgf.not.men.bi.up <- pcgf.up[which(!(pcgf.up$ENSEMBL %in% menin$V4) & pcgf.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+pcgf.not.men.bi.up.prop <- nrow(unique(pcgf.not.men.bi.up))/length(unique(pcgf.up$ENSEMBL))
+pcgf.not.men.bi.down <- pcgf.down[which(!(pcgf.down$ENSEMBL %in% menin$V4) & pcgf.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+pcgf.not.men.bi.down.prop <- nrow(unique(pcgf.not.men.bi.down))/length(unique(pcgf.down$ENSEMBL))
+
+men1.men.not.bi.up <- men.up[which(men.up$ENSEMBL %in% menin$V4 & !(men.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+men1.men.not.bi.up.prop <- nrow(unique(men1.men.not.bi.up))/length(unique(men.up$ENSEMBL))
+men1.men.not.bi.down <- men.down[which(men.down$ENSEMBL %in% menin$V4 & !(men.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+men1.men.not.bi.down.prop <- nrow(unique(men1.men.not.bi.down))/length(unique(men.down$ENSEMBL))
+pcgf.men.not.bi.up <- pcgf.up[which(pcgf.up$ENSEMBL %in% menin$V4 & !(pcgf.up$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+pcgf.men.not.bi.up.prop <- nrow(unique(pcgf.men.not.bi.up))/length(unique(pcgf.up$ENSEMBL))
+pcgf.men.not.bi.down <- pcgf.down[which(pcgf.down$ENSEMBL %in% menin$V4 & !(pcgf.down$ENSEMBL %in% bivalent$ENSEMBL)), "ENSEMBL"]
+pcgf.men.not.bi.down.prop <- nrow(unique(pcgf.men.not.bi.down))/length(unique(pcgf.down$ENSEMBL))
+
+men1.men.bi.up <- men.up[which(men.up$ENSEMBL %in% menin$V4 & men.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+men1.men.bi.up.prop <- nrow(unique(men1.men.bi.up))/length(unique(men.up$ENSEMBL))
+men1.men.bi.down <- men.down[which(men.down$ENSEMBL %in% menin$V4 & men.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+men1.men.bi.down.prop <- nrow(unique(men1.men.bi.down))/length(unique(men.down$ENSEMBL))
+pcgf.men.bi.up <- pcgf.up[which(pcgf.up$ENSEMBL %in% menin$V4 & pcgf.up$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+pcgf.men.bi.up.prop <- nrow(unique(pcgf.men.bi.up))/length(unique(pcgf.up$ENSEMBL))
+pcgf.men.bi.down <- pcgf.down[which(pcgf.down$ENSEMBL %in% menin$V4 & pcgf.down$ENSEMBL %in% bivalent$ENSEMBL), "ENSEMBL"]
+pcgf.men.bi.down.prop <- nrow(unique(pcgf.men.bi.down))/length(unique(pcgf.down$ENSEMBL))
+
+pdf(file = file.path(plots.dir, paste0("Barplot_menin_bivalent_proportion_", mark, "_diffpeaks.pdf")), width = 6, height = 6)
+par(mar = c(4, 8, 4, 4))
+#par(mfrow = c(2, 2))
+barplot(
+  c(pcgf.not.men.not.bi.down.prop, pcgf.not.men.not.bi.up.prop, men1.not.men.not.bi.down.prop, men1.not.men.not.bi.up.prop), 
+  las = 2, 
+  main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nnon-menin-bound & non-bivalent"), 
+  names.arg = c("PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+  col = c("firebrick1", "dodgerblue"),
+  xlim = c(0, 1),
+  horiz = TRUE
+  )
+barplot(
+  c(pcgf.not.men.bi.down.prop, pcgf.not.men.bi.up.prop, men1.not.men.bi.down.prop, men1.not.men.bi.up.prop), 
+  las = 2, 
+  main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nnon-menin-bound & bivalent"), 
+  names.arg = c("PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+  col = c("firebrick1", "dodgerblue"),
+  xlim = c(0, 1),
+  horiz = TRUE
+  )
+barplot(
+  c(pcgf.men.not.bi.down.prop, pcgf.men.not.bi.up.prop, men1.men.not.bi.down.prop, men1.men.not.bi.up.prop), 
+  las = 2, 
+  main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nmenin-bound & non-bivalent"), 
+  names.arg = c("PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+  col = c("firebrick1", "dodgerblue"),
+  xlim = c(0, 1),
+  horiz = TRUE
+  )
+barplot(
+  c(pcgf.men.bi.down.prop, pcgf.men.bi.up.prop, men1.men.bi.down.prop, men1.men.bi.up.prop), 
+  las = 2, 
+  main = paste0("Proportion of genes with up/down\n", mark, " binding which are\nmenin-bound & bivalent"), 
+  names.arg = c("PCGF1KO down", "PCGF1KO up", "MEN1KO down", "MEN1KO up"),
+  col = c("firebrick1", "dodgerblue"),
+  xlim = c(0, 1),
+  horiz = TRUE
+  )
+dev.off()
+```
+
+# make more gene profile and heatmap plots for different gene lists
+```{bash}
+# from RPCG BW dir
+cd BW_RPGC_norm/
+
+# redo each mark separately with different bed files
+sbatch ../../scripts/DTMatrixK4_allgenes.sbatch
+sbatch ../../scripts/DTMatrixK4_meningenes.sbatch
+sbatch ../../scripts/DTMatrixK4_meningenes2.sbatch
+
+sbatch ../../scripts/DTMatrixK27_allgenes.sbatch
+sbatch ../../scripts/DTMatrixK27_meningenes.sbatch
+sbatch ../../scripts/DTMatrixK27_meningenes2.sbatch
+
+sbatch ../../scripts/DTMatrixK119_allgenes.sbatch
+sbatch ../../scripts/DTMatrixK119_meningenes.sbatch
+sbatch ../../scripts/DTMatrixK119_meningenes2.sbatch
+```
+
+# make separate bed files for each category for DT and Christina
+```{r}
+# start from Enid's bed files for DT 
+all.bed <- fread("/data/reference/dawson_labs/bed_files/Hg19/Hg19EnsGeneDT.bed")
+menin.bed <- fread("/dawson_genomics/Projects/Menin/ChIPseq_200320_NB501056_0470_AH5NJJBGXF/scripts/MeninGenesDT.bed")
+# anti-join these to get non-menin
+nonmenin.bed <- anti_join(all.bed, menin.bed)
+# join and anti-join these 2 lists with bivalent genes to get separate bed files for each category
+menin.bi.bed <- inner_join(menin.bed, bivalent, by = c("V4" = "ENSEMBL", "V5" = "SYMBOL"))
+menin.nonbi.bed <- anti_join(menin.bed, bivalent, by = c("V4" = "ENSEMBL", "V5" = "SYMBOL"))
+nonmenin.bi.bed <- inner_join(nonmenin.bed, bivalent, by = c("V4" = "ENSEMBL", "V5" = "SYMBOL"))
+nonmenin.nonbi.bed <- anti_join(nonmenin.bed, bivalent, by = c("V4" = "ENSEMBL", "V5" = "SYMBOL"))
+
+# write out each bed file
+write.table(
+  menin.bi.bed,
+  file.path(sample.dir, "menin_bivalent_DT.bed"),
+  sep = "\t",
+  quote = FALSE,
+  col.names = FALSE,
+  row.names = FALSE
+)
+write.table(
+  menin.nonbi.bed,
+  file.path(sample.dir, "menin_nonbivalent_DT.bed"),
+  sep = "\t",
+  quote = FALSE,
+  col.names = FALSE,
+  row.names = FALSE
+)
+write.table(
+  nonmenin.bi.bed,
+  file.path(sample.dir, "nonmenin_bivalent_DT.bed"),
+  sep = "\t",
+  quote = FALSE,
+  col.names = FALSE,
+  row.names = FALSE
+)
+write.table(
+  nonmenin.nonbi.bed,
+  file.path(sample.dir, "nonmenin_nonbivalent_DT.bed"),
+  sep = "\t",
+  quote = FALSE,
+  col.names = FALSE,
+  row.names = FALSE
+)
+```
+
+# now make heatmaps and profile plots for each mark separated into categories
+```{bash}
+sbatch ../../scripts/DTMatrixK4_4cat_allgenes.sbatch
+sbatch ../../scripts/DTMatrixK27_4cat_allgenes.sbatch
+sbatch ../../scripts/DTMatrixK119_4cat_allgenes.sbatch
+```
+
+# find how many K27 peaks are lost (by at least half) in new 2of3 bivalent list
+```{r}
+comp <- k27.comps[1]
+
+fip.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_1plusnorm.txt')))
+# limit to regions of interest
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+# keep only reads and ensg 
+fc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+# make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+fc.table <- fc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+fc.table <- as.data.frame(fc.table[-is.na(fc.table$ENSEMBL), ])
+# get new FC cols 1:2 move to 2:3 in above manipulation
+fc.table$FC <- fc.table[,2]/fc.table[,3]
+
+# get new bivalent list and intersect with k27 fc table
+comb.bi <- fread("../CUTandTAG_220328_NB501056_0777_AHNGTWBGXL/bivalent_genes/K562_bivalent_genes_2of3.txt")
+k27.bi <- fc.table[fc.table$ENSEMBL %in% comb.bi$ENSEMBL,]
+```
+
+# make new k27 and k119 heatmaps with 2ktss bivalent list
+```{bash}
+# from RPGC nom dir
+cd alignment/BW_RPGC_norm
+
+sbatch ../../scripts/DTMatrixK27_bivalent_genes.sbatch
+sbatch ../../scripts/DTMatrixK119_bivalent_genes.sbatch
+```
+
+# now make k27 and k119 on same hm ordered by k27 using spike-in norm and include EEDko k27
+```{bash}
+sbatch ../../scripts/DTMatrixK27_K119_bivalent_genes.sbatch
+```
+
+# make bivalent heatmaps for K4
+```{bash}
+sbatch ../../scripts/DTMatrixK4_bivalent_genes.sbatch
+```
+
+# remake K27 boxplot for paper Fig6G
+```{r}
+bivalent <- fread("/dawson_genomics/Projects/Menin/CUTandTAG_220328_NB501056_0777_AHNGTWBGXL/bivalent_genes/CSCT03_CAS_bivalent_genes_2kTSS.txt")
+fip.table <- fread(file.path(fip.dir,  "MEN1KOvCAS_H3K27me3_cnrt_macs_peaks_fip_lfc_1plusnorm.txt"))
+
+# same as previous but add stats and change dimensions
+# limit to regions of interest
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+# keep only reads and ensg 
+lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+# make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+lfc.table <- as.data.frame(lfc.table[-is.na(lfc.table$ENSEMBL), ])
+# filter for at least 1 read per million in both
+keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+lfc.table <- lfc.table[keep,]
+# get new LFC cols 1:2 move to 2:3 in above manipulation
+lfc.table$LFC <- log2(lfc.table[,2]/lfc.table[,3])
+men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+pdf(file.path(plots.dir, paste0("Boxplot_1plusnorm_", comp, "_Fig6G.pdf")), height = 8, width = 5)
+boxplot(
+  not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+  names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+  main = paste0(comp, " binding"),
+  ylab = expression(bold(paste("log"[2], " FC"))),
+  col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+  at = c(1, 2, 4, 5),
+  boxwex = 0.5,
+  outline = FALSE,
+  #ylim = c(-2.5, 2.5),
+  whisklty = 1,
+  cex.axis = 0.7
+)
+text(1.85, 2.1, paste0("p < ", t.test(not.men.not.bi.data$LFC, not.men.bi.data$LFC)$p.value))
+text(4.2, 1.9, paste0("p < ", t.test(men.not.bi.data$LFC, men.bi.data$LFC)$p.value))
+abline(h = 0)
+dev.off()
+```
+
+# get more pvalues for christina
+```{r}
+t.test(not.men.not.bi.data$LFC, not.men.bi.data$LFC)$p.value
+t.test(men.not.bi.data$LFC, men.bi.data$LFC)$p.value
+t.test(men.not.bi.data$LFC, not.men.bi.data$LFC)$p.value
+t.test(not.men.not.bi.data$LFC, men.not.bi.data$LFC)$p.value
+t.test(not.men.bi.data$LFC, men.bi.data$LFC)$p.value
+t.test(not.men.not.bi.data$LFC, men.bi.data$LFC)$p.value
+```
+
+# save session info
+```{r}
+sesh.info <- capture.output(sessionInfo())
+writeLines(
+  sesh.info,
+  file.path(session.dir, paste0(Sys.Date(), "_CutAndTag_analysis_220201.txt"))
+)
+```
