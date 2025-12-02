@@ -1,0 +1,2560 @@
+---
+title: "CUTandRUN_220310"
+output: html_document
+---
+
+Project directory:
+/dawson_genomics/Projects/Menin/CUTandRUN_220310_NB501056_0771_AHMVHHBGXL
+
+FASTQ location:
+/pipeline/Runs/NextSeq/220310_NB501056_0771_AHMVHHBGXL/ProjectFolders/Project_Christina-Sparbier/
+
+
+# process amd align fastqs; authors suggest not removing dups as fragments with same coords are expected due to protocol, so dups not removed
+# run from alignment dir
+```{bash}
+cd /dawson_genomics/Projects/Menin/CUTandRUN_220310_NB501056_0771_AHMVHHBGXL/alignment
+for fq in /pipeline/Runs/NextSeq/220310_NB501056_0771_AHMVHHBGXL/ProjectFolders/Project_Christina-Sparbier/*/*_R1_001.fastq.gz
+do
+bname=`basename $fq _R1_001.fastq.gz`
+sbatch ../scripts/CnR_trim_align.sbatch $fq /pipeline/Runs/NextSeq/220310_NB501056_0771_AHMVHHBGXL/ProjectFolders/Project_Christina-Sparbier/*/${bname}_R2_001.fastq.gz
+done
+```
+
+# run multiqc
+```{bash}
+cd fastqc
+module load multiqc/1.8
+multiqc .
+
+# also qc trimmed reads, from alignment dir
+cd ..
+module load fastqc/0.11.6
+fastqc ./*trim_*fq.gz
+
+# run multiqc on trimmed paired reads
+multiqc . --ignore "*U_fastq*" --ignore "*_001_*" --ignore "*Flagstat.txt"
+```
+
+# get bam stats for spike in and samples
+```{bash}
+module load samtools/1.4.1
+mkdir stats
+
+for bam in *sort.Dm.bam
+do
+echo $bam >> stats/DmBamFlagstat.txt
+samtools flagstat $bam >> stats/DmBamFlagstat.txt
+done
+
+for bam in *sort.bam
+do
+echo $bam >> stats/HgBamFlagstat.txt
+samtools flagstat $bam >> stats/HgBamFlagstat.txt
+done
+```
+
+# run through CUT&TAG data processing and analysis protocol
+```{bash}
+# mkdirs for analysis
+mkdir cnr_analysis
+cd cnr_analysis
+mkdir bed
+mkdir bedgraph
+mkdir peakCalling
+mkdir peakCalling/SEACR
+
+module load bedtools/2.26
+module load R/4.0.2
+
+seacr="/dawson_genomics/Projects/Menin/CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/scripts/SEACR_1.3.sh"
+
+# preprocess, normalise and call top 1% first
+# scale factor for each is 1000000/Hg_reads from flagstats file (some experiments did not have spike-in so keeping consistent in all)
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-CAS-H3K27me3_S4.sort.bam 0.1670807
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-CAS-IgG_S1.sort.bam 0.06986923
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-CAS-MLL1_S2.sort.bam 0.07743725
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-CAS-RNAPII_S5.sort.bam 0.1246407
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-CAS-SUZ12_S3.sort.bam 0.1722166
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9.sort.bam 0.08747664
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6.sort.bam 0.0659189
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-MLL1_S7.sort.bam 0.0566445
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S10.sort.bam 0.09061443
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S8.sort.bam 0.1237921
+
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam 0.1146821
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-CAS-MLL1_S12.sort.bam 0.1212419
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-CAS-RING1B_S16.sort.bam 0.08681634
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-EEDkoANDMEN1ko-MLL1_S15.sort.bam 0.09029474
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-EEDkoANDMEN1ko-RING1B_S19.sort.bam 0.1338738
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-EEDko-MLL1_S14.sort.bam 0.1053588
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-EEDko-RING1B_S18.sort.bam 0.1026675
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-MEN1c4-MLL1_S13.sort.bam 0.08713736
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-CSCR04-K562-MEN1c4-RING1B_S17.sort.bam 0.09498892
+
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-I-CSCR03-K562-Cas9-H3K27me3_S59.sort.bam 0.06122262
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-I-CSCR03-K562-Cas9-IgG_S56.sort.bam 0.06005223
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-I-CSCR03-K562-Cas9-SUZ12_S57.sort.bam 0.06869049
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-I-CSCR03-K562-EEDko-H3K27me3_S60.sort.bam 0.06472233
+sbatch ../scripts/run_seacr.sbatch ../alignment/MHC-I-CSCR03-K562-EEDko-SUZ12_S58.sort.bam 0.06458345
+
+# get control peaks for each
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-CAS-H3K27me3_S4_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-CAS-IgG_S1_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-CAS-MLL1_S2_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-CAS-IgG_S1_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-CAS-RNAPII_S5_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-CAS-IgG_S1_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-CAS-SUZ12_S3_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-CAS-IgG_S1_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-MEN1c4-KO-MLL1_S7_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S10_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S8_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6_bowtie2.fragments.normalised.bedgraph
+
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-CAS-MLL1_S12_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-CAS-RING1B_S16_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-EEDkoANDMEN1ko-MLL1_S15_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-EEDkoANDMEN1ko-RING1B_S19_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-EEDko-MLL1_S14_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-EEDko-RING1B_S18_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-MEN1c4-MLL1_S13_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-CSCR04-K562-MEN1c4-RING1B_S17_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-CSCR04-K562-CAS-IgG_S11_bowtie2.fragments.normalised.bedgraph
+
+
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-I-CSCR03-K562-Cas9-H3K27me3_S59_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-I-CSCR03-K562-Cas9-IgG_S56_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-I-CSCR03-K562-Cas9-SUZ12_S57_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-I-CSCR03-K562-Cas9-IgG_S56_bowtie2.fragments.normalised.bedgraph 
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-I-CSCR03-K562-EEDko-H3K27me3_S60_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-I-CSCR03-K562-Cas9-IgG_S56_bowtie2.fragments.normalised.bedgraph
+sbatch ../scripts/seacr_control.sbatch bedgraph/MHC-I-CSCR03-K562-EEDko-SUZ12_S58_bowtie2.fragments.normalised.bedgraph bedgraph/MHC-I-CSCR03-K562-Cas9-IgG_S56_bowtie2.fragments.normalised.bedgraph 
+```
+
+# try implementing cut&run tools, run step-wise only alignment & peak calling to get macs peaks
+```{bash}
+# make a working dir for cnrtools and run from there (set to work dir in config)
+mkdir cnr_tools_wd
+mkdir cnr_tools_wd/fastq
+
+# run step-wise for more control, needs to be run from tools wd & use sym links in wd for fastqs
+cd cnr_tools_wd/fastq
+for fq in /pipeline/Runs/NextSeq/220310_NB501056_0771_AHMVHHBGXL/ProjectFolders/Project_Christina-Sparbier/*/*.fastq.gz
+do
+bname=`basename $fq`
+ln -s $fq ./$bname
+done
+
+# also symlink fastqs from Kah Lok's dir
+for fq in /pipeline/Runs/NextSeq/220310_NB501056_0771_AHMVHHBGXL/ProjectFolders/Project_Kah-Lok-Chan/*/MHC-I-CSCR03*fastq.gz
+do
+bname=`basename $fq`
+ln -s $fq ./$bname
+done
+
+# run validation and create scripts first, use software installed in prev project dir
+cd ..
+/dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK/cutandruntools/validate.py ../scripts/config.json
+/dawson_genomics/Projects/JQ1VHL/CutandRun_211014_NB501056_0704_AHNYJVBGXK/cutandruntools/create_scripts.py ../scripts/config.json
+
+for fq in fastq/*_R1_001.fastq.gz
+do
+sbatch integrated.sh $fq
+done
+
+# move aligned reads from fastq dir to alignment dir
+for bam in fastq/aligned.aug10/*aligned_reads.bam
+do
+bname=`basename $bam`
+mv $bam aligned.aug10/$bname
+done
+
+for bam in aligned.aug10/*aligned_reads.bam
+do
+sbatch aligned.aug10/integrated.step2.sh $bam
+done
+```
+
+# post-process CnR tools output so it will work properly with diffpeaks (separate organisms and sort)
+```{bash}
+# run from cnrt output alignment dir
+cd aligned.aug10
+for bam in *aligned_reads.bam
+do
+sbatch ../../scripts/cnrt_postprocess_bams.sbatch $bam
+done
+```
+
+# make matrix of control peaks 
+# had issue with this in default R/4.0.2 so had to switch to 4.1.0 for this one
+### too few peaks in macs broadpeaks as called by chipseq method, so re-ran on cnrt macs peaks
+```{r}
+library(GenomicRanges)
+library(Rsubread)
+library(dplyr)
+library(stringr)
+library(chromVAR)
+
+project.dir <- "/dawson_genomics/Projects/Menin/CUTandRUN_220310_NB501056_0771_AHMVHHBGXL"
+cnr.dir <- file.path(project.dir, "cnr_analysis")
+align.dir <- file.path(project.dir, "alignment")
+cnrt.dir <- file.path(project.dir, "cnr_tools_wd")
+macs.dir <- file.path(cnrt.dir, "macs2.broad.all.frag.aug18")
+fip.dir <- file.path(project.dir, "frag_in_peak")
+dir.create(fip.dir)
+
+# make master peak list
+peaks <- list.files(macs.dir, pattern = "_aligned_reads_peaks.broadPeak", full.names = TRUE)
+
+mPeak <- GRanges()
+for(peak in peaks){
+  peakRes = read.table(
+    peak,
+    header = FALSE, 
+    fill = TRUE
+    )
+  mPeak = GRanges(seqnames = peakRes$V1, IRanges(start = peakRes$V2, end = peakRes$V3), strand = "*") %>% append(mPeak, .)
+}
+masterPeak = reduce(mPeak)
+
+# get fragment counts for each peak in the master peaks list
+bams <- list.files(align.dir, pattern = "\\.sort.bam$", full.names = TRUE)
+countsMat <- matrix(NA, length(masterPeak), length(bams))
+i <- 1
+for(bam in bams){
+  fragment_counts <- chromVAR::getCounts(
+    alignment_files = bam, 
+    peaks = masterPeak, 
+    paired = TRUE, 
+    by_rg = FALSE, 
+    format = "bam"
+    )
+  countsMat[, i] = counts(fragment_counts)[, 1]
+  i = i+1
+}
+
+# add col and row names
+colnames(countsMat) <- gsub("-", "_", gsub("MHC-.?.?CSCR0[1-5]-K562-", "", gsub("\\.sort.bam$", "", basename(bams))))
+rownames(countsMat) <- paste0(seqnames(masterPeak), ":", start(masterPeak), "-", end(masterPeak))
+
+## remove low counts
+keep <- which(rowSums(countsMat > 1) > 2)
+countsMat <- countsMat[keep, ]
+
+# write out counts matrix
+write.table(
+  countsMat,
+  file.path(fip.dir, "cnrt_macs_peaks_counts_matrix..txt"),
+  sep = "\t",
+  row.names = TRUE,
+  col.names = NA
+  )
+
+countsDF <- as.data.frame(countsMat)
+# normalise pseudocounts as in prev analysis by Hg reads, then write out
+countsDF$CAS_H3K27me3_S4 <- (countsDF$CAS_H3K27me3_S4 + 0.5) * 0.1670807
+countsDF$CAS_IgG_S1 <- (countsDF$CAS_IgG_S1 + 0.5) * 0.06986923
+countsDF$CAS_MLL1_S2 <- (countsDF$CAS_MLL1_S2 + 0.5) * 0.07743725
+countsDF$CAS_RNAPII_S5 <- (countsDF$CAS_RNAPII_S5 + 0.5) * 0.1246407
+countsDF$CAS_SUZ12_S3 <-(countsDF$CAS_SUZ12_S3 + 0.5) * 0.1722166
+countsDF$MEN1c4_KO_H3K27me3_S9 <- (countsDF$MEN1c4_KO_H3K27me3_S9 + 0.5) * 0.08747664
+countsDF$MEN1c4_KO_IgG_S6 <- (countsDF$MEN1c4_KO_IgG_S6 + 0.5) * 0.0659189
+countsDF$MEN1c4_KO_MLL1_S7 <- (countsDF$MEN1c4_KO_MLL1_S7 + 0.5) * 0.0566445
+countsDF$MEN1c4_KO_RNAPII_S10 <- (countsDF$MEN1c4_KO_RNAPII_S10 + 0.5) * 0.09061443
+countsDF$MEN1c4_KO_SUZ12_S8 <- (countsDF$MEN1c4_KO_SUZ12_S8 + 0.5) * 0.1237921
+
+countsDF$CAS_IgG_S11 <- (countsDF$CAS_IgG_S11 + 0.5) * 0.1146821
+countsDF$CAS_MLL1_S12 <- (countsDF$CAS_MLL1_S12 + 0.5) * 0.1212419
+countsDF$CAS_RING1B_S16 <- (countsDF$CAS_RING1B_S16 + 0.5) * 0.08681634
+countsDF$EEDkoANDMEN1ko_MLL1_S15 <-(countsDF$EEDkoANDMEN1ko_MLL1_S15 + 0.5) * 0.09029474
+countsDF$EEDkoANDMEN1ko_RING1B_S19 <- (countsDF$EEDkoANDMEN1ko_RING1B_S19 + 0.5) * 0.1338738
+countsDF$EEDko_MLL1_S14 <- (countsDF$EEDko_MLL1_S14 + 0.5) * 0.1053588
+countsDF$EEDko_RING1B_S18 <- (countsDF$EEDko_RING1B_S18 + 0.5) * 0.1026675
+countsDF$MEN1c4_MLL1_S13 <- (countsDF$MEN1c4_MLL1_S13 + 0.5) * 0.08713736
+countsDF$MEN1c4_RING1B_S17 <- (countsDF$MEN1c4_RING1B_S17 + 0.5) * 0.09498892
+
+countsDF$Cas9_H3K27me3_S59 <- (countsDF$Cas9_H3K27me3_S59 + 0.5) * 0.06122262
+countsDF$Cas9_IgG_S56 <- (countsDF$Cas9_IgG_S56 + 0.5) * 0.06005223
+countsDF$Cas9_SUZ12_S57 <- (countsDF$Cas9_SUZ12_S57 + 0.5) * 0.06869049
+countsDF$EEDko_H3K27me3_S60 <- (countsDF$EEDko_H3K27me3_S60 + 0.5) * 0.06472233
+countsDF$EEDko_SUZ12_S58 <- (countsDF$EEDko_SUZ12_S58 + 0.5) * 0.06458345
+
+write.table(
+  countsDF,
+  file.path(fip.dir, "Norm_psuedocount_cnrt_macs_peaks_counts_matrix.txt"),
+  sep = "\t",
+  row.names = TRUE,
+  col.names = NA
+  )
+
+countsNorm <- as.data.frame(countsMat)
+# also normalise non-pseudocounts by Hg reads, then write out
+countsNorm$CAS_H3K27me3_S4 <- (countsNorm$CAS_H3K27me3_S4) * 0.1670807
+countsNorm$CAS_IgG_S1 <- (countsNorm$CAS_IgG_S1) * 0.06986923
+countsNorm$CAS_MLL1_S2 <- (countsNorm$CAS_MLL1_S2) * 0.07743725
+countsNorm$CAS_RNAPII_S5 <- (countsNorm$CAS_RNAPII_S5) * 0.1246407
+countsNorm$CAS_SUZ12_S3 <-(countsNorm$CAS_SUZ12_S3) * 0.1722166
+countsNorm$MEN1c4_KO_H3K27me3_S9 <- (countsNorm$MEN1c4_KO_H3K27me3_S9) * 0.08747664
+countsNorm$MEN1c4_KO_IgG_S6 <- (countsNorm$MEN1c4_KO_IgG_S6) * 0.0659189
+countsNorm$MEN1c4_KO_MLL1_S7 <- (countsNorm$MEN1c4_KO_MLL1_S7) * 0.0566445
+countsNorm$MEN1c4_KO_RNAPII_S10 <- (countsNorm$MEN1c4_KO_RNAPII_S10) * 0.09061443
+countsNorm$MEN1c4_KO_SUZ12_S8 <- (countsNorm$MEN1c4_KO_SUZ12_S8) * 0.1237921
+
+countsNorm$CAS_IgG_S11 <- (countsNorm$CAS_IgG_S11) * 0.1146821
+countsNorm$CAS_MLL1_S12 <- (countsNorm$CAS_MLL1_S12) * 0.1212419
+countsNorm$CAS_RING1B_S16 <- (countsNorm$CAS_RING1B_S16) * 0.08681634
+countsNorm$EEDkoANDMEN1ko_MLL1_S15 <- (countsNorm$EEDkoANDMEN1ko_MLL1_S15) * 0.09029474
+countsNorm$EEDkoANDMEN1ko_RING1B_S19 <- (countsNorm$EEDkoANDMEN1ko_RING1B_S19) * 0.1338738
+countsNorm$EEDko_MLL1_S14 <- (countsNorm$EEDko_MLL1_S14) * 0.1053588
+countsNorm$EEDko_RING1B_S18 <- (countsNorm$EEDko_RING1B_S18) * 0.1026675
+countsNorm$MEN1c4_MLL1_S13 <- (countsNorm$MEN1c4_MLL1_S13) * 0.08713736
+countsNorm$MEN1c4_RING1B_S17 <- (countsNorm$MEN1c4_RING1B_S17) * 0.09498892
+
+countsNorm$Cas9_H3K27me3_S59 <- (countsNorm$Cas9_H3K27me3_S59) * 0.06122262
+countsNorm$Cas9_IgG_S56 <- (countsNorm$Cas9_IgG_S56) * 0.06005223
+countsNorm$Cas9_SUZ12_S57 <- (countsNorm$Cas9_SUZ12_S57) * 0.06869049
+countsNorm$EEDko_H3K27me3_S60 <- (countsNorm$EEDko_H3K27me3_S60) * 0.06472233
+countsNorm$EEDko_SUZ12_S58 <- (countsNorm$EEDko_SUZ12_S58) * 0.06458345
+
+write.table(
+  countsNorm,
+  file.path(fip.dir, "Norm_cnrt_macs_peaks_counts_matrix.txt"),
+  sep = "\t",
+  row.names = TRUE,
+  col.names = NA
+  )
+```
+
+
+
+# use cnrt macs peaks to get LFC of frags in peaks
+```{r}
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+
+# get annotation object
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+
+# set desired comparisons
+comps <- list(
+	"MEN1c4KOvCAS_H3K27me3" = c("MEN1c4_KO_H3K27me3_S9", "CAS_H3K27me3_S4"),
+	"MEN1c4KOvCAS_MLL1" = c("MEN1c4_KO_MLL1_S7", "CAS_MLL1_S2"),
+	"MEN1c4KOvCAS_RNAPII" = c("MEN1c4_KO_RNAPII_S10", "CAS_RNAPII_S5"),
+	"MEN1c4KOvCAS_SUZ12" = c("MEN1c4_KO_SUZ12_S8", "CAS_SUZ12_S3"),
+	"EEDKOvCAS_MLL1" = c("EEDko_MLL1_S14", "CAS_MLL1_S12"),
+	"EEDKOvCAS_RING1B" = c("EEDko_RING1B_S18", "CAS_RING1B_S16"),
+	"EEDKOandMEN1KOvCAS_MLL1" = c("EEDkoANDMEN1ko_MLL1_S15", "CAS_MLL1_S12"),
+	"EEDKOandMEN1KOvCAS_RING1B" = c("EEDkoANDMEN1ko_RING1B_S19", "CAS_RING1B_S16"),
+	"MEN1KOvCAS_MLL1" = c("MEN1c4_MLL1_S13", "CAS_MLL1_S12"),
+	"MEN1KOvCAS_RING1B" = c("MEN1c4_RING1B_S17", "CAS_RING1B_S16"),
+	"EEDKOvCAS_H3K27me3" = c("EEDko_H3K27me3_S60", "Cas9_H3K27me3_S59"),
+	"EEDKOvCAS_SUZ12" = c("EEDko_SUZ12_S58", "Cas9_SUZ12_S57")
+)
+
+# get lfc of reads in peaks in norm pseudocounts table for each comparison
+for(comp.i in 1:length(comps)){
+
+	# get each comparison to specify peaks matrix
+	comp.x <- comps[[comp.i]][1]
+	comp.y <- comps[[comp.i]][2]
+
+	comp.table <- cbind(countsDF[ , comp.x], countsDF[ , comp.y])
+	colnames(comp.table) <- c(comp.x, comp.y)
+	rownames(comp.table) <- rownames(countsDF)
+	# remove those with zeros in both
+	keep <- which(rowSums(countsMat[,c(comp.x, comp.y)] >= 1) > 0)
+	comp.table <- comp.table[keep, ]
+	comp.table <- as.data.frame(comp.table)
+	# add lfc
+	comp.table$LFC <- log2(comp.table[, comp.x]/comp.table[, comp.y])
+	# add coordinates to table
+	chr.pos <- strsplit2(rownames(comp.table), ":")
+	comp.table$Chr <- chr.pos[,1]
+	start.end <- strsplit2(chr.pos[,2], "-")
+	comp.table$Start <- as.numeric(start.end[,1])
+	comp.table$End <- as.numeric(start.end[,2])
+
+	# make genomic ranges object for annotation
+	gr.fc.table <- with(comp.table, GRanges(Chr, IRanges(start=Start, end=End)))
+	gr.fc.table$LFC <- comp.table$LFC
+	seqlevelsStyle(gr.fc.table) <- "UCSC"
+	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+	lfc.ann.table <- as.data.frame(lfc.ann)
+	lfc.counts.table <- cbind(comp.table[1:2], lfc.ann.table)
+	intron <- which(substr(lfc.counts.table$annotation, 1, 6) == "Intron")
+	lfc.counts.table$annotation[intron] <- "Intron"
+	exon <- which(substr(lfc.counts.table$annotation, 1, 4) == "Exon")
+	lfc.counts.table$annotation[exon] <- "Exon"
+	
+	write.table(
+		lfc.counts.table,
+		file.path(fip.dir, paste0(names(comps[comp.i]), '_cnrt_macs_peaks_fip_lfc_pseudocount.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+}
+
+# now for non-pseudocounts with log2(1+...)
+for(comp.i in 1:length(comps)){
+
+	# get each comparison to specify peaks matrix
+	comp.x <- comps[[comp.i]][1]
+	comp.y <- comps[[comp.i]][2]
+
+	comp.table <- cbind(countsNorm[ , comp.x], countsNorm[ , comp.y])
+	colnames(comp.table) <- c(comp.x, comp.y)
+	rownames(comp.table) <- rownames(countsNorm)
+	# remove those with zeros in both
+	keep <- which(rowSums(countsMat[,c(comp.x, comp.y)] >= 1) > 0)
+	comp.table <- comp.table[keep, ]
+	comp.table <- as.data.frame(comp.table)
+	# add lfc
+	comp.table$LFC <- log2((1+comp.table[, comp.x])/(1+comp.table[, comp.y]))
+	# add coordinates to table
+	chr.pos <- strsplit2(rownames(comp.table), ":")
+	comp.table$Chr <- chr.pos[,1]
+	start.end <- strsplit2(chr.pos[,2], "-")
+	comp.table$Start <- as.numeric(start.end[,1])
+	comp.table$End <- as.numeric(start.end[,2])
+
+	# make genomic ranges object for annotation
+	gr.fc.table <- with(comp.table, GRanges(Chr, IRanges(start=Start, end=End)))
+	gr.fc.table$LFC <- comp.table$LFC
+	seqlevelsStyle(gr.fc.table) <- "UCSC"
+	lfc.ann <- annotatePeak(gr.fc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+	lfc.ann.table <- as.data.frame(lfc.ann)
+	lfc.counts.table <- cbind(comp.table[1:2], lfc.ann.table)
+	intron <- which(substr(lfc.counts.table$annotation, 1, 6) == "Intron")
+	lfc.counts.table$annotation[intron] <- "Intron"
+	exon <- which(substr(lfc.counts.table$annotation, 1, 4) == "Exon")
+	lfc.counts.table$annotation[exon] <- "Exon"
+	
+	write.table(
+		lfc.counts.table,
+		file.path(fip.dir, paste0(names(comps[comp.i]), '_cnrt_macs_peaks_fip_lfc_1plusnorm.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+}
+```
+
+# since not replicates cannot estimate dispersion, but try edger with estimated dispersion
+```{r}
+library(edgeR)
+
+edger.dir <- file.path(cnr.dir, "edger")
+
+# read in counts matrix for edger
+count.mat <- read.delim(
+  file.path(cnr.dir, "peakCalling/SEACR/control_peaks_relaxed_counts.txt"), 
+  sep = "\t", 
+  row.names = 1
+  )
+
+peak.counts <- DGEList(counts = count.mat)
+norm.peaks <- calcNormFactors(peak.counts)
+norm.peaks$samples$group <- colnames(norm.peaks$counts)
+
+for(com.i in 1:length(comps)){
+  et <- exactTest(norm.peaks, pair = c(comps[[com.i]][1], comps[[com.i]][2]), dispersion = 0.4)
+  keep <- which(et$table$PValue < 0.33)
+  sig.table <- et$table[keep, ]
+  coords <- strsplit2(rownames(sig.table), ":")
+  sig.table$Chr <- coords[,1]
+  se <- strsplit2(coords[,2], "-")
+  sig.table$Start <- as.numeric(se[,1])
+  sig.table$End <- as.numeric(se[,2])
+  
+  gr.table <- with(sig.table, GRanges(Chr, IRanges(start=Start, end=End)))
+	gr.table$logFC <- sig.table$logFC
+	gr.table$logCPM <- sig.table$logCPM
+	gr.table$PValue <- sig.table$PValue
+	seqlevelsStyle(gr.table) <- "UCSC"
+	table.ann <- annotatePeak(gr.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+	ann.df <- as.data.frame(table.ann)
+	colnames(ann.df)[1:3] <- c("peakChr", "peakStart", "peakEnd")
+	ann.df <- ann.df[, -c(5, 14:16)]
+
+	write.table(
+		ann.df,
+		file.path(edger.dir, paste0(names(comps[com.i]), '_SEACR_relaxed_peaks_sig_exact_test_table.txt')),
+		sep = '\t',
+		col.names = TRUE,
+		row.names = FALSE,
+		quote = FALSE
+		)
+}
+```
+
+
+# boxplot of menin vs not and bivalent vs not for each comparison
+```{r}
+library(data.table)
+
+plots.dir <- file.path(project.dir, "plots")
+
+menin <- read.table("/dawson_genomics/Projects/Menin/ChIPseq_200320_NB501056_0470_AH5NJJBGXF/scripts/MeninGenes.bed")
+bivalent <- scan("/dawson_genomics/Projects/Menin/ChIPseq_combined_200320_210422_210623/sample_info/K562_bivalent_genes.txt", what = "character", skip = 1)
+
+# get mll experiments for looking at groups
+mll.comps <- c("MEN1c4KOvCAS_MLL1", "EEDKOvCAS_MLL1", "EEDKOandMEN1KOvCAS_MLL1", "MEN1KOvCAS_MLL1")
+
+
+for(comp in mll.comps){
+  fip.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_pseudocount.txt')))
+  # limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-which(is.na(lfc.table$ENSEMBL)), ])
+  # filter for at least 1 psuedo read per million in both
+  keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+  lfc.table <- lfc.table[keep,]
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2(lfc.table[,2]/lfc.table[,3])
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$ENSEMBL),]
+  pdf(file.path(cnr.plots.dir, paste0("Boxplot_psuedocount_", comp, "_cnrt_macs_peaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+# now do same for lfc(1+...) data
+for(comp in mll.comps){
+  fip.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_pseudocount.txt')))
+  # limit to regions of interest
+  keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+  # keep only reads and ensg 
+  lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+  # make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+  lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+  lfc.table <- as.data.frame(lfc.table[-which(is.na(lfc.table$ENSEMBL)), ])
+  # filter for at least 1 psuedo read per million in both
+  keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+  lfc.table <- lfc.table[keep,]
+  # get new LFC cols 1:2 move to 2:3 in above manipulation
+  lfc.table$LFC <- log2((1 + lfc.table[,2])/(1 + lfc.table[,3]))
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$SYMBOL %in% bivalent$SYMBOL,]
+  men.not.bi.data <- men.data[!(men.data$SYMBOL %in% bivalent$SYMBOL),]
+  not.men.bi.data <- not.men.data[not.men.data$SYMBOL %in% bivalent$SYMBOL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$SYMBOL %in% bivalent$SYMBOL),]
+  pdf(file.path(cnr.plots.dir, paste0("Boxplot_1plusnorm_", comp, "_cnrt_macs_peaks.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(comp, " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+}
+
+for(comp in 1:length(mll.comps)){
+  et.table <- fread(file.path(edger.dir, paste0(names(mll.comps)[comp.i], "_SEACR_relaxed_peaks_sig_exact_test_table.txt")))
+  bar.data <- data.table(matrix(nrow = 2, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- et.table[et.table$logFC > 0, ]
+  down.peaks <- et.table[et.table$logFC < 0, ]
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    length(unique(not.men.not.bi.up$SYMBOL))/sum(length(unique(not.men.not.bi.up$SYMBOL)), length(unique(not.men.not.bi.down$SYMBOL))),
+    length(unique(not.men.not.bi.down$SYMBOL))/sum(length(unique(not.men.not.bi.up$SYMBOL)), length(unique(not.men.not.bi.down$SYMBOL)))
+    )
+  bar.data$nmb <- rbind(
+    length(unique(not.men.bi.up$SYMBOL))/sum(length(unique(not.men.bi.up$SYMBOL)), length(unique(not.men.bi.down$SYMBOL))), 
+    length(unique(not.men.bi.down$SYMBOL))/sum(length(unique(not.men.bi.up$SYMBOL)), length(unique(not.men.bi.down$SYMBOL)))
+    )
+  bar.data$mnb <- rbind(
+    length(unique(men.not.bi.up$SYMBOL))/sum(length(unique(men.not.bi.up$SYMBOL)), length(unique(men.not.bi.down$SYMBOL))), 
+    length(unique(men.not.bi.down$SYMBOL))/sum(length(unique(men.not.bi.up$SYMBOL)), length(unique(men.not.bi.down$SYMBOL)))
+    )
+  bar.data$mb <- rbind(
+    length(unique(men.bi.up$SYMBOL))/sum(length(unique(men.bi.up$SYMBOL)), length(unique(men.bi.down$SYMBOL))), 
+    length(unique(men.bi.down$SYMBOL))/sum(length(unique(men.bi.up$SYMBOL)), length(unique(men.bi.down$SYMBOL)))
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("prop_bar_", names(mll.comps)[comp.i], ".pdf")))
+  par(mar = c(5, 4, 2, 6), xpd = TRUE)
+  barplot(bar.matrix, col = c("indianred1", "dodgerblue"), border = "white", xlab = names(mll.comps)[comp.i], ylab = "Proportion", bty = "L")
+  legend("topright", legend = c("Up", "Down"), fill = c("indianred1", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+```
+
+# all plots for all comps with C&T bivalent genes
+```{r}
+# read in K562 bivalent gene
+bivalent <- fread("/dawson_genomics/Projects/Menin/CUTandTAG_220328_NB501056_0777_AHNGTWBGXL/bivalent_genes/CnT_K562_bivalent_genes.txt")
+
+for(comp.i in 1:length(comps)){
+  lfc.table <- fread(file.path(fip.dir, paste0(names(comps)[comp.i], '_cnrt_macs_peaks_fip_lfc_ann_table.txt')))
+  # limit to TSS +/- 500bp
+  lfc.table <- subset(lfc.table, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+  not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$SYMBOL %in% bivalent$SYMBOL,]
+  men.not.bi.data <- men.data[!(men.data$SYMBOL %in% bivalent$SYMBOL),]
+  not.men.bi.data <- not.men.data[not.men.data$SYMBOL %in% bivalent$SYMBOL,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$SYMBOL %in% bivalent$SYMBOL),]
+  pdf(file.path(plots.dir, paste0("cnr_tools/Boxplot_", names(comps)[comp.i], "_cnrt_macs_peaks_menin_bivalent.pdf")))
+  boxplot(
+    not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = paste0(names(comps)[comp.i], " binding"),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-2.5, 2.5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+  
+  # also make stacked barplot with new bivalent list and lfc table
+  bar.data <- data.table(matrix(nrow = 2, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- lfc.table[lfc.table$LFC > 0, ]
+  down.peaks <- lfc.table[lfc.table$LFC < 0, ]
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    length(unique(not.men.not.bi.up$SYMBOL))/sum(length(unique(not.men.not.bi.up$SYMBOL)), length(unique(not.men.not.bi.down$SYMBOL))),
+    length(unique(not.men.not.bi.down$SYMBOL))/sum(length(unique(not.men.not.bi.up$SYMBOL)), length(unique(not.men.not.bi.down$SYMBOL)))
+    )
+  bar.data$nmb <- rbind(
+    length(unique(not.men.bi.up$SYMBOL))/sum(length(unique(not.men.bi.up$SYMBOL)), length(unique(not.men.bi.down$SYMBOL))), 
+    length(unique(not.men.bi.down$SYMBOL))/sum(length(unique(not.men.bi.up$SYMBOL)), length(unique(not.men.bi.down$SYMBOL)))
+    )
+  bar.data$mnb <- rbind(
+    length(unique(men.not.bi.up$SYMBOL))/sum(length(unique(men.not.bi.up$SYMBOL)), length(unique(men.not.bi.down$SYMBOL))), 
+    length(unique(men.not.bi.down$SYMBOL))/sum(length(unique(men.not.bi.up$SYMBOL)), length(unique(men.not.bi.down$SYMBOL)))
+    )
+  bar.data$mb <- rbind(
+    length(unique(men.bi.up$SYMBOL))/sum(length(unique(men.bi.up$SYMBOL)), length(unique(men.bi.down$SYMBOL))), 
+    length(unique(men.bi.down$SYMBOL))/sum(length(unique(men.bi.up$SYMBOL)), length(unique(men.bi.down$SYMBOL)))
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("cnr_tools/prop_bar_", names(comps)[comp.i], "_LFC.pdf")))
+  par(mar = c(5, 4, 2, 6), xpd = TRUE)
+  barplot(bar.matrix, col = c("indianred1", "dodgerblue"), border = "white", xlab = names(comps)[comp.i], ylab = "Proportion", bty = "L")
+  legend("topright", legend = c("Up", "Down"), fill = c("indianred1", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+  
+  # make 3 category stacked bar as well
+  bar.data <- data.table(matrix(nrow = 3, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_cond2.bed")))
+  common <- fread(file.path(cnr.diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_common.bed")))
+  # limit to TSS +/- 500bp
+  up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  common <- subset(common, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.common <- common[common$ENSEMBL %in% menin$V4,]
+  not.men.common <- common[!(common$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.common <- men.common[men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.common <- men.common[!(men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.common <- not.men.common[not.men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.common <- not.men.common[!(not.men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    nrow(not.men.not.bi.up)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common)),
+    nrow(not.men.not.bi.common)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common)),
+    nrow(not.men.not.bi.down)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down), nrow(not.men.not.bi.common))
+    )
+  bar.data$nmb <- rbind(
+    nrow(not.men.bi.up)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common)),
+    nrow(not.men.bi.common)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common)),
+    nrow(not.men.bi.down)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down), nrow(not.men.bi.common))
+    )
+  bar.data$mnb <- rbind(
+    nrow(men.not.bi.up)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common)),
+    nrow(men.not.bi.common)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common)), 
+    nrow(men.not.bi.down)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down), nrow(men.not.bi.common))
+    )
+  bar.data$mb <- rbind(
+    nrow(men.bi.up)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common)),
+    nrow(men.bi.common)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common)),
+    nrow(men.bi.down)/sum(nrow(men.bi.up), nrow(men.bi.down), nrow(men.bi.common))
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "common", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("3cat_prop_bar_", names(comps)[comp.i], ".pdf")))
+  par(mar = c(7, 4, 1, 6), xpd = TRUE)
+  barplot(
+    bar.matrix, 
+    col = c("indianred1", "grey", "dodgerblue"), 
+    border = "white", 
+    xlab = "", 
+    ylab = "Proportion", 
+    bty = "L"
+    )
+  mtext(paste0("\n", names(comps)[comp.i], "\n#up=", nrow(up.peaks), " #common=", nrow(common), " #down=", nrow(down.peaks)), side=1, line=5)
+  legend("topright", legend = c("KO", "Common", "Control"), fill = c("indianred1", "grey", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+```
+
+# try just comparing lfc of normalised coverage
+```{r}
+norm.counts.table <- data.table()
+
+norm.counts.table$MHC_CSCR01_K562_MEN1c4_KO_MLL1_S7 <- norm.peaks$counts[,"MHC_CSCR01_K562_MEN1c4_KO_MLL1_S7"] * norm.peaks$samples["MHC_CSCR01_K562_MEN1c4_KO_MLL1_S7", "norm.factors"]
+norm.counts.table$MHC_CSCR01_K562_CAS_MLL1_S2 <- norm.peaks$counts[,"MHC_CSCR01_K562_CAS_MLL1_S2"] * norm.peaks$samples["MHC_CSCR01_K562_CAS_MLL1_S2", "norm.factors"]
+norm.counts.table$MHC_CSCR04_K562_EEDko_MLL1_S14 <- norm.peaks$counts[,"MHC_CSCR04_K562_EEDko_MLL1_S14"] * norm.peaks$samples["MHC_CSCR04_K562_EEDko_MLL1_S14", "norm.factors"]
+norm.counts.table$MHC_CSCR04_K562_CAS_MLL1_S12 <- norm.peaks$counts[,"MHC_CSCR04_K562_CAS_MLL1_S12"] * norm.peaks$samples["MHC_CSCR04_K562_CAS_MLL1_S12", "norm.factors"]
+norm.counts.table$MHC_CSCR04_K562_EEDkoANDMEN1ko_MLL1_S15 <- norm.peaks$counts[,"MHC_CSCR04_K562_EEDkoANDMEN1ko_MLL1_S15"] * norm.peaks$samples["MHC_CSCR04_K562_EEDkoANDMEN1ko_MLL1_S15", "norm.factors"]
+norm.counts.table$MHC_CSCR04_K562_MEN1c4_MLL1_S13 <- norm.peaks$counts[,"MHC_CSCR04_K562_MEN1c4_MLL1_S13"] * norm.peaks$samples["MHC_CSCR04_K562_MEN1c4_MLL1_S13", "norm.factors"]
+norm.counts.table$peakCoords <- rownames(norm.peaks$counts)
+
+# remove low counts
+keep <- which(rowSums(norm.counts.table[,1:6]) > 5)
+norm.counts.table <- norm.counts.table[keep, ]
+
+# calculate lfc and add to table
+norm.counts.table$MEN1c4KOvCAS_MLL1_LFC <- log2(norm.counts.table$MHC_CSCR01_K562_MEN1c4_KO_MLL1_S7 / norm.counts.table$MHC_CSCR01_K562_CAS_MLL1_S2)
+norm.counts.table$EEDKOvCAS_MLL1_LFC <- log2(norm.counts.table$MHC_CSCR04_K562_EEDko_MLL1_S14 / norm.counts.table$MHC_CSCR04_K562_CAS_MLL1_S12)
+norm.counts.table$EEDKOandMEN1KOvCAS_MLL1_LFC <- log2(norm.counts.table$MHC_CSCR04_K562_EEDkoANDMEN1ko_MLL1_S15 / norm.counts.table$MHC_CSCR04_K562_CAS_MLL1_S12)
+norm.counts.table$MEN1KOvCAS_MLL1_LFC <- log2(norm.counts.table$MHC_CSCR04_K562_MEN1c4_MLL1_S13 / norm.counts.table$MHC_CSCR04_K562_CAS_MLL1_S12)
+
+# separate coords for GR
+chr.range <- strsplit2(norm.counts.table$peakCoords, ":")
+norm.counts.table$Chr <- chr.range[,1]
+startend <- strsplit2(chr.range[,2], "-")
+norm.counts.table$Start <- as.numeric(startend[,1])
+norm.counts.table$End <- as.numeric(startend[,2])
+
+# annotate and write out
+lfc.table <- with(norm.counts.table, GRanges(Chr, IRanges(start=Start, end=End)))
+lfc.table$MEN1c4KOvCAS_MLL1_LFC <- norm.counts.table$MEN1c4KOvCAS_MLL1_LFC
+lfc.table$EEDKOvCAS_MLL1_LFC <- norm.counts.table$EEDKOvCAS_MLL1_LFC
+lfc.table$EEDKOandMEN1KOvCAS_MLL1_LFC <- norm.counts.table$EEDKOandMEN1KOvCAS_MLL1_LFC
+lfc.table$MEN1KOvCAS_MLL1_LFC <- norm.counts.table$MEN1KOvCAS_MLL1_LFC
+seqlevelsStyle(lfc.table) <- "UCSC"
+lfc.ann <- annotatePeak(lfc.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+lfc.df <- as.data.frame(lfc.ann)
+colnames(lfc.df)[1:3] <- c("peakChr", "peakStart", "peakEnd")
+lfc.df <- lfc.df[, -c(5, 15:17)]
+
+write.table(
+	lfc.df,
+	file.path(cnr.dir, 'MLL1_norm_counts_LFC_table.txt'),
+	sep = '\t',
+	col.names = TRUE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+names(mll.comps) <- c("MEN1c4KOvCAS_MLL1_LFC", "EEDKOvCAS_MLL1_LFC", "EEDKOandMEN1KOvCAS_MLL1_LFC", "MEN1KOvCAS_MLL1_LFC")
+
+for(comp.i in 1:length(mll.comps)){
+  comp.data <- cbind(lfc.df[names(mll.comps)[comp.i]], lfc.df$ENSEMBL)
+  keep <- which(is.finite(comp.data[,1]))
+  comp.data <- comp.data[keep,]
+  colnames(comp.data) <- c("logFC", "ENSEMBL")
+  men.data <- comp.data[comp.data$ENSEMBL %in% menin$V4,]
+  not.men.data <- comp.data[!(comp.data$ENSEMBL %in% menin$V4),]
+  men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent,]
+  men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent),]
+  not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent,]
+  not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent),]
+  pdf(file.path(plots.dir, paste0("Boxplot_", gsub("_LFC", "", names(mll.comps)[comp.i]), "_norm_counts_LFC.pdf")))
+  boxplot(
+    not.men.not.bi.data$logFC, not.men.bi.data$logFC, men.not.bi.data$logFC, men.bi.data$logFC,
+    names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+    main = gsub("_LFC", "", names(mll.comps)[comp.i]),
+    ylab = expression(bold(paste("log"[2], " FC"))),
+    col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+    at = c(1, 2, 4, 5),
+    boxwex = 0.5,
+    outline = FALSE,
+    #ylim = c(-5, 5),
+    #notch = TRUE,
+    whisklty = 1
+  )
+  dev.off()
+  
+  # also look at prop bar for this data
+  bar.data <- data.table(matrix(nrow = 2, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- comp.data[comp.data$logFC > 0, ]
+  down.peaks <- comp.data[comp.data$logFC < 0, ]
+  mid <- intersect(up.peaks$ENSEMBL, down.peaks$ENSEMBL)
+  up.int <- which(up.peaks$ENSEMBL %in% mid)
+  up.peaks <- up.peaks[-up.int, ]
+  down.int <- which(down.peaks$ENSEMBL %in% mid)
+  down.peaks <- down.peaks[-down.int, ]
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    length(unique(not.men.not.bi.up$ENSEMBL))/sum(length(unique(not.men.not.bi.up$ENSEMBL)), length(unique(not.men.not.bi.down$ENSEMBL))),
+    length(unique(not.men.not.bi.down$ENSEMBL))/sum(length(unique(not.men.not.bi.up$ENSEMBL)), length(unique(not.men.not.bi.down$ENSEMBL)))
+    )
+  bar.data$nmb <- rbind(
+    length(unique(not.men.bi.up$ENSEMBL))/sum(length(unique(not.men.bi.up$ENSEMBL)), length(unique(not.men.bi.down$ENSEMBL))), 
+    length(unique(not.men.bi.down$ENSEMBL))/sum(length(unique(not.men.bi.up$ENSEMBL)), length(unique(not.men.bi.down$ENSEMBL)))
+    )
+  bar.data$mnb <- rbind(
+    length(unique(men.not.bi.up$ENSEMBL))/sum(length(unique(men.not.bi.up$ENSEMBL)), length(unique(men.not.bi.down$ENSEMBL))), 
+    length(unique(men.not.bi.down$ENSEMBL))/sum(length(unique(men.not.bi.up$ENSEMBL)), length(unique(men.not.bi.down$ENSEMBL)))
+    )
+  bar.data$mb <- rbind(
+    length(unique(men.bi.up$ENSEMBL))/sum(length(unique(men.bi.up$ENSEMBL)), length(unique(men.bi.down$ENSEMBL))), 
+    length(unique(men.bi.down$ENSEMBL))/sum(length(unique(men.bi.up$ENSEMBL)), length(unique(men.bi.down$ENSEMBL)))
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(plots.dir, paste0("prop_bar_", names(mll.comps)[comp.i], ".pdf")))
+  par(mar = c(5, 4, 2, 6), xpd = TRUE)
+  barplot(bar.matrix, col = c("indianred1", "dodgerblue"), border = "white", xlab = names(mll.comps)[comp.i], ylab = "Proportion", bty = "L")
+  legend("topright", legend = c("Up", "Down"), fill = c("indianred1", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+```
+
+# run macs for broadpeaks p<0.1 and with CNRT settings with bdg output to try to get good peaks for use with diffpeaks
+```{bash}
+# run from macs dir
+mkdir macs
+cd macs
+mkdir broadpeaks
+mkdir cnrt_broadpeaks
+
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-CAS-H3K27me3_S4.sort.bam ../alignment/MHC-CSCR01-K562-CAS-IgG_S1.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-CAS-MLL1_S2.sort.bam ../alignment/MHC-CSCR01-K562-CAS-IgG_S1.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-CAS-RNAPII_S5.sort.bam ../alignment/MHC-CSCR01-K562-CAS-IgG_S1.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-CAS-SUZ12_S3.sort.bam ../alignment/MHC-CSCR01-K562-CAS-IgG_S1.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9.sort.bam ../alignment/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-MLL1_S7.sort.bam ../alignment/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S10.sort.bam ../alignment/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S8.sort.bam ../alignment/MHC-CSCR01-K562-MEN1c4-KO-IgG_S6.sort.bam
+
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-CAS-MLL1_S12.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-CAS-RING1B_S16.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-EEDkoANDMEN1ko-MLL1_S15.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-EEDkoANDMEN1ko-RING1B_S19.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-EEDko-MLL1_S14.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-EEDko-RING1B_S18.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-MEN1c4-MLL1_S13.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-CSCR04-K562-MEN1c4-RING1B_S17.sort.bam ../alignment/MHC-CSCR04-K562-CAS-IgG_S11.sort.bam
+
+
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-I-CSCR03-K562-Cas9-H3K27me3_S59.sort.bam ../alignment/MHC-I-CSCR03-K562-Cas9-IgG_S56.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-I-CSCR03-K562-Cas9-SUZ12_S57.sort.bam ../alignment/MHC-I-CSCR03-K562-Cas9-IgG_S56.sort.bam 
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-I-CSCR03-K562-EEDko-H3K27me3_S60.sort.bam ../alignment/MHC-I-CSCR03-K562-Cas9-IgG_S56.sort.bam
+sbatch ../scripts/macs2.sbatch ../alignment/MHC-I-CSCR03-K562-EEDko-SUZ12_S58.sort.bam ../alignment/MHC-I-CSCR03-K562-Cas9-IgG_S56.sort.bam 
+```
+
+# now use bdgdiff to compare peaks, first with broadpeaks
+```{bash}
+mkdir bdgdiff
+
+egrep "tags after filtering in control" broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9_peaks.xls 
+# tags after filtering in control: 7332064
+egrep "tags after filtering in control" broadpeaks/MHC-CSCR01-K562-CAS-H3K27me3_S4_peaks.xls 
+# tags after filtering in control: 6840121
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9_control_lambda.bdg broadpeaks/MHC-CSCR01-K562-CAS-H3K27me3_S4_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-CAS-H3K27me3_S4_control_lambda.bdg 7332064 6840121 diff_MEN1c4KOvCAS_H3K27me3
+
+# d1/d2 are the same for all samples with the same input so are the same for all comparisons in this experiment
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-MLL1_S7_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-MLL1_S7_control_lambda.bdg broadpeaks/MHC-CSCR01-K562-CAS-MLL1_S2_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-CAS-MLL1_S2_control_lambda.bdg 7332064 6840121 diff_MEN1c4KOvCAS_MLL1
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S10_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S10_control_lambda.bdg broadpeaks/MHC-CSCR01-K562-CAS-RNAPII_S5_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-CAS-RNAPII_S5_control_lambda.bdg 7332064 6840121 diff_MEN1c4KOvCAS_RNAPII
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S8_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S8_control_lambda.bdg broadpeaks/MHC-CSCR01-K562-CAS-SUZ12_S3_treat_pileup.bdg broadpeaks/MHC-CSCR01-K562-CAS-SUZ12_S3_control_lambda.bdg 7332064 6840121 diff_MEN1c4KOvCAS_SUZ12
+
+
+egrep "tags after filtering in control" broadpeaks/MHC-CSCR04-K562-EEDko-MLL1_S14_peaks.xls 
+# tags after filtering in control: 4193308
+egrep "tags after filtering in control" broadpeaks/MHC-CSCR04-K562-CAS-MLL1_S12_peaks.xls
+# tags after filtering in control: 4193308
+# as seen above all samples in this experiment will have same d1/d2 as same input was used
+# keeping for consistency and usage with sbatch script, although no depth adjustment will be made
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR04-K562-EEDko-MLL1_S14_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-EEDko-MLL1_S14_control_lambda.bdg broadpeaks/MHC-CSCR04-K562-CAS-MLL1_S12_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-CAS-MLL1_S12_control_lambda.bdg 4193308 4193308 diff_EEDKOvCAS_MLL1
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR04-K562-EEDko-RING1B_S18_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-EEDko-RING1B_S18_control_lambda.bdg broadpeaks/MHC-CSCR04-K562-CAS-RING1B_S16_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-CAS-RING1B_S16_control_lambda.bdg 4193308 4193308 diff_EEDKOvCAS_RING1B
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR04-K562-EEDkoANDMEN1ko-MLL1_S15_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-EEDkoANDMEN1ko-MLL1_S15_control_lambda.bdg broadpeaks/MHC-CSCR04-K562-CAS-MLL1_S12_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-CAS-MLL1_S12_control_lambda.bdg 4193308 4193308 diff_EEDKOandMEN1KOvCAS_MLL1
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR04-K562-EEDkoANDMEN1ko-RING1B_S19_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-EEDkoANDMEN1ko-RING1B_S19_control_lambda.bdg broadpeaks/MHC-CSCR04-K562-CAS-RING1B_S16_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-CAS-RING1B_S16_control_lambda.bdg 4193308 4193308 diff_EEDKOandMEN1KOvCAS_RING1B
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR04-K562-MEN1c4-MLL1_S13_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-MEN1c4-MLL1_S13_control_lambda.bdg broadpeaks/MHC-CSCR04-K562-CAS-MLL1_S12_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-CAS-MLL1_S12_control_lambda.bdg 4193308 4193308 diff_MEN1KOvCAS_MLL1
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-CSCR04-K562-MEN1c4-RING1B_S17_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-MEN1c4-RING1B_S17_control_lambda.bdg broadpeaks/MHC-CSCR04-K562-CAS-RING1B_S16_treat_pileup.bdg broadpeaks/MHC-CSCR04-K562-CAS-RING1B_S16_control_lambda.bdg 4193308 4193308 diff_MEN1KOvCAS_RING1B
+
+egrep "tags after filtering in control" broadpeaks/MHC-I-CSCR03-K562-EEDko-H3K27me3_S60_peaks.xls 
+# tags after filtering in control: 7551894
+egrep "tags after filtering in control" broadpeaks/MHC-I-CSCR03-K562-Cas9-H3K27me3_S59_peaks.xls
+# tags after filtering in control: 7551894
+# as seen above all samples in this experiment will have same d1/d2 as same input was used
+# keeping for consistency and usage with sbatch script, although no depth adjustment will be made
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-I-CSCR03-K562-EEDko-H3K27me3_S60_treat_pileup.bdg broadpeaks/MHC-I-CSCR03-K562-EEDko-H3K27me3_S60_control_lambda.bdg broadpeaks/MHC-I-CSCR03-K562-Cas9-H3K27me3_S59_treat_pileup.bdg broadpeaks/MHC-I-CSCR03-K562-Cas9-H3K27me3_S59_control_lambda.bdg 4193308 4193308 diff_EEDKOvCAS_H3K27me3
+
+sbatch ../scripts/bdgdiff.sbatch broadpeaks/MHC-I-CSCR03-K562-EEDko-SUZ12_S58_treat_pileup.bdg broadpeaks/MHC-I-CSCR03-K562-EEDko-SUZ12_S58_control_lambda.bdg broadpeaks/MHC-I-CSCR03-K562-Cas9-SUZ12_S57_treat_pileup.bdg broadpeaks/MHC-I-CSCR03-K562-Cas9-SUZ12_S57_control_lambda.bdg 4193308 4193308 diff_EEDKOvCAS_SUZ12
+```
+
+
+# annotate diff peaks files
+```{r}
+# from macs dir
+diff.dir <- file.path(macs.dir, "bdgdiff")
+setwd(macs.dir)
+
+# set comparisons and conditions for file names
+conds <- c("common", "cond1", "cond2")
+
+for(comp.i in 1:length(comps)){
+  for(cond.j in 1:3){
+    # read in each file to annotate, rewrite, subset and write
+    diff.table <- fread(file.path(diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_", conds[cond.j], ".bed")), skip = 1)
+  	# make genomic ranges object for annotation
+  	gr.diff <- with(diff.table, GRanges(V1, IRanges(start=V2, end=V3)))
+  	gr.diff$logLikelihood <- diff.table$V5
+  	seqlevelsStyle(gr.diff) <- "UCSC"
+  	diff.ann <- annotatePeak(gr.diff, TxDb = txdb, annoDb = "org.Hs.eg.db")
+  	diff.ann.table <- as.data.frame(diff.ann)
+  
+  	write.table(
+  		diff.ann.table,
+  		file.path(diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_", conds[cond.j], ".bed")),
+  		sep = '\t',
+  		col.names = TRUE,
+  		row.names = FALSE,
+  		quote = FALSE
+  		)
+  }
+}
+```
+
+# get loglikelihood>3.84 (p<0.05) for each list and separate into 4 groups to show proportion up/down in each category
+```{r}
+# loop through logLR values for comparison
+llrs <- c(3.841, 2.706, 1.642)
+names(llrs) <- c("p0.05", "p0.10", "p0.20")
+
+mll.comps <- list(comps$MEN1c4KOvCAS_MLL1, comps$EEDKOvCAS_MLL1, comps$EEDKOandMEN1KOvCAS_MLL1, comps$MEN1KOvCAS_MLL1)
+names(mll.comps) <- c("MEN1c4KOvCAS_MLL1", "EEDKOvCAS_MLL1", "EEDKOandMEN1KOvCAS_MLL1", "MEN1KOvCAS_MLL1")
+
+### redone with cutandtag bivalent genes
+for(llr.i in 1:length(llrs)){
+  # do K562 first
+  for(comp in names(mll.comps)){
+    bar.data <- data.table(matrix(nrow = 2, ncol = 4))
+    colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+    up.peaks <- fread(file.path(diff.dir, paste0("diff_", comp, "_c3.0_cond1.bed")))
+    down.peaks <- fread(file.path(diff.dir, paste0("diff_", comp, "_c3.0_cond2.bed")))
+    # limit to TSS +/- 500bp
+    up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+    down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+    #up.peaks <- up.peaks[up.peaks$logLikelihood > llrs[llr.i], ]
+    #down.peaks <- down.peaks[down.peaks$logLikelihood > llrs[llr.i], ]
+    men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+    not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+    men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+    not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+    men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+    men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+    not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+    not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+    men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+    men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+    not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+    not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+    # use proportions for barplot
+    bar.data$nmnb <- rbind(nrow(not.men.not.bi.up)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)), nrow(not.men.not.bi.down)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)))
+    bar.data$nmb <- rbind(nrow(not.men.bi.up)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)), nrow(not.men.bi.down)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)))
+    bar.data$mnb <- rbind(nrow(men.not.bi.up)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)), nrow(men.not.bi.down)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)))
+    bar.data$mb <- rbind(nrow(men.bi.up)/sum(nrow(men.bi.up), nrow(men.bi.down)), nrow(men.bi.down)/sum(nrow(men.bi.up), nrow(men.bi.down)))
+    bar.matrix <- as.matrix(bar.data)
+    rownames(bar.matrix) <- c("up", "down")
+    colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+    pdf(file.path(plots.dir, paste0("prop_bar_", comp, "_CnT_bilvalent.pdf")))
+    par(mar = c(5, 4, 2, 6), xpd = TRUE)
+    barplot(
+      bar.matrix, 
+      col = c("indianred1", "dodgerblue"), 
+      border = "white", 
+      xlab = paste0(comp, "\n#up=", nrow(up.peaks), " #down=", nrow(down.peaks)), 
+      ylab = "Proportion", 
+      bty = "L"
+      )
+    legend("topright", legend = c("Up", "Down"), fill = c("indianred1", "dodgerblue"), inset = c(-0.2, 0))
+    dev.off()
+  }
+}
+```
+
+
+# now use bdgdiff to compare peaks, first with macs broadpeaks (all frag, no dedup)
+```{bash}
+# from dir with desired peaks
+cd ../macs2.broad.all.frag.aug18
+mkdir bdgdiff
+
+egrep "effective genome size" MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9_aligned_reads_peaks.xls 
+# effective genome size = 2.70e+09
+egrep "effective genome size" MHC-CSCR01-K562-CAS-H3K27me3_S4_aligned_reads_peaks.xls 
+# effective genome size = 2.70e+09
+# as seen above all samples in this experiment will have same d1/d2 as control distribution not informed by IgG with this method
+# keeping for consistency and usage with sbatch script, although no depth adjustment will be made
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-MEN1c4-KO-H3K27me3_S9_aligned_reads_control_lambda.bdg MHC-CSCR01-K562-CAS-H3K27me3_S4_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-CAS-H3K27me3_S4_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_MEN1c4KOvCAS_H3K27me3
+
+# d1/d2 are the same for all samples with the same input so are the same for all comparisons in this experiment
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR01-K562-MEN1c4-KO-MLL1_S7_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-MEN1c4-KO-MLL1_S7_aligned_reads_control_lambda.bdg MHC-CSCR01-K562-CAS-MLL1_S2_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-CAS-MLL1_S2_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_MEN1c4KOvCAS_MLL1
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S10_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-MEN1c4-KO-RNAPII_S10_aligned_reads_control_lambda.bdg MHC-CSCR01-K562-CAS-RNAPII_S5_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-CAS-RNAPII_S5_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_MEN1c4KOvCAS_RNAPII
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S8_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-MEN1c4-KO-SUZ12_S8_aligned_reads_control_lambda.bdg MHC-CSCR01-K562-CAS-SUZ12_S3_aligned_reads_treat_pileup.bdg MHC-CSCR01-K562-CAS-SUZ12_S3_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_MEN1c4KOvCAS_SUZ12
+
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR04-K562-EEDko-MLL1_S14_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-EEDko-MLL1_S14_aligned_reads_control_lambda.bdg MHC-CSCR04-K562-CAS-MLL1_S12_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-CAS-MLL1_S12_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_EEDKOvCAS_MLL1
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR04-K562-EEDko-RING1B_S18_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-EEDko-RING1B_S18_aligned_reads_control_lambda.bdg MHC-CSCR04-K562-CAS-RING1B_S16_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-CAS-RING1B_S16_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_EEDKOvCAS_RING1B
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR04-K562-EEDkoANDMEN1ko-MLL1_S15_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-EEDkoANDMEN1ko-MLL1_S15_aligned_reads_control_lambda.bdg MHC-CSCR04-K562-CAS-MLL1_S12_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-CAS-MLL1_S12_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_EEDKOandMEN1KOvCAS_MLL1
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR04-K562-EEDkoANDMEN1ko-RING1B_S19_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-EEDkoANDMEN1ko-RING1B_S19_aligned_reads_control_lambda.bdg MHC-CSCR04-K562-CAS-RING1B_S16_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-CAS-RING1B_S16_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_EEDKOandMEN1KOvCAS_RING1B
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR04-K562-MEN1c4-MLL1_S13_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-MEN1c4-MLL1_S13_aligned_reads_control_lambda.bdg MHC-CSCR04-K562-CAS-MLL1_S12_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-CAS-MLL1_S12_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_MEN1KOvCAS_MLL1
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-CSCR04-K562-MEN1c4-RING1B_S17_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-MEN1c4-RING1B_S17_aligned_reads_control_lambda.bdg MHC-CSCR04-K562-CAS-RING1B_S16_aligned_reads_treat_pileup.bdg MHC-CSCR04-K562-CAS-RING1B_S16_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_MEN1KOvCAS_RING1B
+
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-I-CSCR03-K562-EEDko-H3K27me3_S60_aligned_reads_treat_pileup.bdg MHC-I-CSCR03-K562-EEDko-H3K27me3_S60_aligned_reads_control_lambda.bdg MHC-I-CSCR03-K562-Cas9-H3K27me3_S59_aligned_reads_treat_pileup.bdg MHC-I-CSCR03-K562-Cas9-H3K27me3_S59_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_EEDKOvCAS_H3K27me3
+
+sbatch ../../scripts/bdgdiff.sbatch MHC-I-CSCR03-K562-EEDko-SUZ12_S58_aligned_reads_treat_pileup.bdg MHC-I-CSCR03-K562-EEDko-SUZ12_S58_aligned_reads_control_lambda.bdg MHC-I-CSCR03-K562-Cas9-SUZ12_S57_aligned_reads_treat_pileup.bdg MHC-I-CSCR03-K562-Cas9-SUZ12_S57_aligned_reads_control_lambda.bdg 2700000000 2700000000 diff_EEDKOvCAS_SUZ12
+```
+
+
+# annotate diff peaks files
+```{r}
+# from macs dir
+cnr.macs.dir <- file.path(project.dir, "cnr_tools_wd/macs2.broad.all.frag.aug18")
+cnr.diff.dir <- file.path(cnr.macs.dir, "bdgdiff")
+setwd(cnr.macs.dir)
+
+for(comp.i in 1:length(comps)){
+  for(cond.j in 1:3){
+    # read in each file to annotate, rewrite, subset and write
+    diff.table <- fread(file.path(cnr.diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_", conds[cond.j], ".bed")), skip = 1)
+  	# make genomic ranges object for annotation
+  	gr.diff <- with(diff.table, GRanges(V1, IRanges(start=V2, end=V3)))
+  	gr.diff$logLikelihood <- diff.table$V5
+  	seqlevelsStyle(gr.diff) <- "UCSC"
+  	diff.ann <- annotatePeak(gr.diff, TxDb = txdb, annoDb = "org.Hs.eg.db")
+  	diff.ann.table <- as.data.frame(diff.ann)
+  
+  	write.table(
+  		diff.ann.table,
+  		file.path(cnr.diff.dir, paste0("diff_", names(comps)[comp.i], "_c3.0_", conds[cond.j], ".bed")),
+  		sep = '\t',
+  		col.names = TRUE,
+  		row.names = FALSE,
+  		quote = FALSE
+  		)
+  }
+}
+```
+
+# make stacked bar plots for bdgdiff output from cnrtools, no LLR filtering
+```{r}
+# make subdir in plots for cnrt output
+cnr.plots.dir <- file.path(plots.dir, "cnr_tools")
+dir.create(cnr.plots.dir)
+
+for(comp in names(comps)){
+  bar.data <- data.table(matrix(nrow = 2, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond2.bed")))
+  # limit to TSS +/- 500bp
+  up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(nrow(not.men.not.bi.up)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)), nrow(not.men.not.bi.down)/sum(nrow(not.men.not.bi.up), nrow(not.men.not.bi.down)))
+  bar.data$nmb <- rbind(nrow(not.men.bi.up)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)), nrow(not.men.bi.down)/sum(nrow(not.men.bi.up), nrow(not.men.bi.down)))
+  bar.data$mnb <- rbind(nrow(men.not.bi.up)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)), nrow(men.not.bi.down)/sum(nrow(men.not.bi.up), nrow(men.not.bi.down)))
+  bar.data$mb <- rbind(nrow(men.bi.up)/sum(nrow(men.bi.up), nrow(men.bi.down)), nrow(men.bi.down)/sum(nrow(men.bi.up), nrow(men.bi.down)))
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(cnr.plots.dir, paste0("prop_bar_", comp, ".pdf")))
+  par(mar = c(5, 4, 2, 6), xpd = TRUE)
+  bp <- barplot(
+    bar.matrix, 
+    col = c("indianred1", "dodgerblue"), 
+    border = "white", 
+    xlab = comp, 
+    ylab = "Proportion",
+    bty = "L"
+    )
+  # text on top (down peaks)
+  text(bp, 1, c(nrow(not.men.not.bi.down), nrow(not.men.bi.down), nrow(men.not.bi.down), nrow(men.bi.down)), cex = 1.2, pos = 1)
+  # text on bottom (up peaks)
+  text(bp, 0, c(nrow(not.men.not.bi.up), nrow(not.men.bi.up), nrow(men.not.bi.up), nrow(men.bi.up)), cex = 1.2, pos = 3)
+  legend("topright", legend = c("Up", "Down"), fill = c("indianred1", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+```
+
+# barplots with common genes as well
+```{r}
+for(comp in names(comps)){
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond2.bed")))
+  bar.data <- data.table(matrix(nrow = 3, ncol = 4))
+  colnames(bar.data) <- c("nmnb", "nmb", "mnb", "mb")
+  up.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond1.bed")))
+  down.peaks <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_cond2.bed")))
+  common <- fread(file.path(cnr.diff.dir, paste0("diff_", comp, "_c3.0_common.bed")))
+  # limit to TSS +/- 500bp
+  up.peaks <- subset(up.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  down.peaks <- subset(down.peaks, distanceToTSS >= -500 & distanceToTSS <= 500)
+  common <- subset(common, distanceToTSS >= -500 & distanceToTSS <= 500)
+  men.up <- up.peaks[up.peaks$ENSEMBL %in% menin$V4,]
+  not.men.up <- up.peaks[!(up.peaks$ENSEMBL %in% menin$V4),]
+  men.down <- down.peaks[down.peaks$ENSEMBL %in% menin$V4,]
+  not.men.down <- down.peaks[!(down.peaks$ENSEMBL %in% menin$V4),]
+  men.common <- common[common$ENSEMBL %in% menin$V4,]
+  not.men.common <- common[!(common$ENSEMBL %in% menin$V4),]
+  men.bi.up <- men.up[men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.up <- men.up[!(men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.up <- not.men.up[not.men.up$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.up <- not.men.up[!(not.men.up$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.down <- men.down[men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.down <- men.down[!(men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.down <- not.men.down[not.men.down$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.down <- not.men.down[!(not.men.down$ENSEMBL %in% bivalent$ENSEMBL),]
+  men.bi.common <- men.common[men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  men.not.bi.common <- men.common[!(men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  not.men.bi.common <- not.men.common[not.men.common$ENSEMBL %in% bivalent$ENSEMBL,]
+  not.men.not.bi.common <- not.men.common[!(not.men.common$ENSEMBL %in% bivalent$ENSEMBL),]
+  # use proportions for barplot
+  bar.data$nmnb <- rbind(
+    nrow(not.men.not.bi.up),
+    nrow(not.men.not.bi.common),
+    nrow(not.men.not.bi.down)
+    )
+  bar.data$nmb <- rbind(
+    nrow(not.men.bi.up),
+    nrow(not.men.bi.common),
+    nrow(not.men.bi.down)
+    )
+  bar.data$mnb <- rbind(
+    nrow(men.not.bi.up),
+    nrow(men.not.bi.common), 
+    nrow(men.not.bi.down)
+    )
+  bar.data$mb <- rbind(
+    nrow(men.bi.up),
+    nrow(men.bi.common),
+    nrow(men.bi.down)
+    )
+  bar.matrix <- as.matrix(bar.data)
+  rownames(bar.matrix) <- c("up", "common", "down")
+  colnames(bar.matrix) <- c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent")
+  pdf(file.path(cnr.plots.dir, paste0("bar_", comp, ".pdf")))
+  par(mar = c(7, 4, 1, 6), xpd = TRUE)
+  bp <- barplot(
+    bar.matrix, 
+    col = c("indianred1", "grey", "dodgerblue"), 
+    border = "white", 
+    xlab = comp, 
+#    ylab = "Proportion",
+    beside = TRUE,
+    bty = "L"
+    )
+  text(bp, 0, bar.matrix, cex = 0.7, pos = 3)
+  legend("topright", legend = c("KO", "Common", "Control"), fill = c("indianred1", "grey", "dodgerblue"), inset = c(-0.2, 0))
+  dev.off()
+}
+
+```
+
+# get matrix of cov at all genes
+```{bash}
+# ron from RPCG dir
+cd RPGCNormBW
+module load deeptools/3.5.0
+
+# run separated by mark and experiment
+sbatch ../../scripts/DTMatrixCSCR03K27.sbatch
+sbatch ../../scripts/DTMatrixCSCR03SUZ12.sbatch
+sbatch ../../scripts/DTMatrixCSCR04MLL1.sbatch
+sbatch ../../scripts/DTMatrixCSCR04RING1B.sbatch
+sbatch ../../scripts/DTMatrixCSCR01MLL1.sbatch
+sbatch ../../scripts/DTMatrixCSCR01K27.sbatch
+sbatch ../../scripts/DTMatrixCSCR01SUZ12.sbatch
+
+# redo heatmap colours
+sbatch ../../scripts/DTHeat.sbatch
+
+# resubmitted scripts w/genes only bed file
+sbatch ../../scripts/DTMatrixCSCR01MLL1.sbatch
+sbatch ../../scripts/DTMatrixCSCR01K27.sbatch
+sbatch ../../scripts/DTMatrixCSCR01SUZ12.sbatch
+sbatch ../../scripts/DTMatrixCSCR03K27.sbatch
+sbatch ../../scripts/DTMatrixCSCR03SUZ12.sbatch
+sbatch ../../scripts/DTMatrixCSCR04MLL1.sbatch
+sbatch ../../scripts/DTMatrixCSCR04RING1B.sbatch
+
+# now make 4 category plots
+sbatch ../../scripts/DTMatrixCSCR01MLL1_4cat.sbatch
+sbatch ../../scripts/DTMatrixCSCR01K27_4cat.sbatch
+sbatch ../../scripts/DTMatrixCSCR01SUZ12_4cat.sbatch
+sbatch ../../scripts/DTMatrixCSCR03K27_4cat.sbatch
+sbatch ../../scripts/DTMatrixCSCR03SUZ12_4cat.sbatch
+sbatch ../../scripts/DTMatrixCSCR04MLL1_4cat.sbatch
+sbatch ../../scripts/DTMatrixCSCR04RING1B_4cat.sbatch
+```
+
+# make bed of genes ordered by MLL1 FC to use in heatmaps
+```{r}
+ref.dir <- file.path(project.dir, "reference_files")
+dir.create(ref.dir)
+
+# treat CSCR01 and CSCR04 as replicates, use sum of normalised reads in KO over sum of normalised WT reads
+mll.norm <- countsNorm[ , c("MEN1c4_KO_MLL1_S7", "MEN1c4_MLL1_S13", "CAS_MLL1_S2", "CAS_MLL1_S12")]
+
+# annotate fc list
+# add coordinates to table
+chr.pos <- strsplit2(rownames(mll.norm), ":")
+mll.norm$Chr <- chr.pos[,1]
+start.end <- strsplit2(chr.pos[,2], "-")
+mll.norm$Start <- as.numeric(start.end[,1])
+mll.norm$End <- as.numeric(start.end[,2])
+# remove those with 0 reads in both WT
+mll.norm <- mll.norm[-which(rowSums(mll.norm[, 3:4]) == 0), ]
+
+# make genomic ranges object for annotation
+gr.mll.table <- with(mll.norm, GRanges(Chr, IRanges(start=Start, end=End)))
+seqlevelsStyle(gr.mll.table) <- "UCSC"
+mll.ann <- annotatePeak(gr.mll.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.ann.table <- as.data.frame(mll.ann)
+mll.counts.table <- cbind(mll.norm, mll.ann.table)
+# fix names
+intron <- which(substr(mll.counts.table$annotation, 1, 6) == "Intron")
+mll.counts.table$annotation[intron] <- "Intron"
+exon <- which(substr(mll.counts.table$annotation, 1, 4) == "Exon")
+mll.counts.table$annotation[exon] <- "Exon"
+
+# limit to gene body +1kbp and sum reads
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+# keep only reads and ensg 
+mll.counts <- mll.counts.table[mll.counts.table$annotation %in% keep, c(1:4, 22)]
+# make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+mll.counts <- mll.counts %>% group_by(ENSEMBL) %>% summarize_all(sum)
+mll.counts <- as.data.frame(mll.counts[-which(is.na(mll.counts$ENSEMBL)), ])
+# get new FC of summed reads 
+mll.counts$FC <- rowSums(mll.counts[ ,2:3])/rowSums(mll.counts[,4:5])
+
+# add coordinates for gene body only (for DT)
+ensg.coord <- unique(mll.counts.table[which(mll.counts.table$ENSEMBL %in% mll.counts$ENSEMBL), c(14:16, 22)])
+# get largest possible transcript coordinates for each gene
+genes.coord <- NULL
+for(ensg in unique(ensg.coord$ENSEMBL)){
+  ensg.sub <- subset(ensg.coord, ENSEMBL == ensg)
+  ens.pos <- cbind(ensg.sub$ENSEMBL[1], ensg.sub$geneChr[1], min(ensg.sub$geneStart), max(ensg.sub$geneEnd))
+  genes.coord <- rbind(genes.coord, ens.pos)
+}
+colnames(genes.coord) <- c("ENSEMBL", "Chr", "Start", "End")
+
+mll.counts.coords <- merge(mll.counts, genes.coord)
+# sort by descending FC
+mll.counts.coords <- mll.counts.coords[order(mll.counts.coords$FC, decreasing = TRUE), ]
+
+# write full table
+write.table(
+	mll.counts.coords,
+	file.path(ref.dir, 'merged_CnR_MLL_FC_table.txt'),
+	sep = '\t',
+	col.names = TRUE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+# make bed only and write out
+mll.bed <- mll.counts.coords[, c(7:9, 6, 1)]
+write.table(
+	mll.bed,
+	file.path(ref.dir, 'merged_CnR_MLL_FC.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# make DT heatmaps with new MLL FC
+```{bash}
+# run from MLL project dir
+sbatch scripts/DTMatrix_mergedMLL1_FC.sbatch
+```
+
+# now with just CSCR04 as this was the cleaner data
+```{r}
+# get CSCR04 samples only
+mll.norm <- countsNorm[ , c("MEN1c4_MLL1_S13", "CAS_MLL1_S12")]
+
+# annotate fc list
+# add coordinates to table
+chr.pos <- strsplit2(rownames(mll.norm), ":")
+mll.norm$Chr <- chr.pos[,1]
+start.end <- strsplit2(chr.pos[,2], "-")
+mll.norm$Start <- as.numeric(start.end[,1])
+mll.norm$End <- as.numeric(start.end[,2])
+# remove those with 0 reads in WT
+mll.norm <- mll.norm[-which(mll.norm[, 2] == 0), ]
+
+# make genomic ranges object for annotation
+gr.mll.table <- with(mll.norm, GRanges(Chr, IRanges(start=Start, end=End)))
+seqlevelsStyle(gr.mll.table) <- "UCSC"
+mll.ann <- annotatePeak(gr.mll.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.ann.table <- as.data.frame(mll.ann)
+mll.counts.table <- cbind(mll.norm, mll.ann.table)
+# fix names
+intron <- which(substr(mll.counts.table$annotation, 1, 6) == "Intron")
+mll.counts.table$annotation[intron] <- "Intron"
+exon <- which(substr(mll.counts.table$annotation, 1, 4) == "Exon")
+mll.counts.table$annotation[exon] <- "Exon"
+
+# limit to gene body +1kbp and sum reads
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+# keep only reads and ensg 
+mll.counts <- mll.counts.table[mll.counts.table$annotation %in% keep, c(1:2, 20)]
+# make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+mll.counts <- mll.counts %>% group_by(ENSEMBL) %>% summarize_all(sum)
+mll.counts <- as.data.frame(mll.counts[-which(is.na(mll.counts$ENSEMBL)), ])
+# get new FC of summed reads 
+mll.counts$FC <- mll.counts$MEN1c4_MLL1_S13/mll.counts$CAS_MLL1_S12
+
+# add coordinates for gene body only (for DT)
+ensg.coord <- unique(mll.counts.table[which(mll.counts.table$ENSEMBL %in% mll.counts$ENSEMBL), c(12:14, 20:21)])
+# get largest possible transcript coordinates for each gene
+genes.coord <- NULL
+for(ensg in unique(ensg.coord$ENSEMBL)){
+  ensg.sub <- subset(ensg.coord, ENSEMBL == ensg)
+  ens.pos <- cbind(ensg.sub$ENSEMBL[1], ensg.sub$SYMBOL[1], ensg.sub$geneChr[1], min(ensg.sub$geneStart), max(ensg.sub$geneEnd))
+  genes.coord <- rbind(genes.coord, ens.pos)
+}
+colnames(genes.coord) <- c("ENSEMBL", "SYMBOL", "Chr", "Start", "End")
+
+mll.counts.coords <- merge(mll.counts, genes.coord)
+# sort by descending FC and reorder columns
+mll.fc <- mll.counts.coords[order(mll.counts.coords$FC, decreasing = TRUE), c(1, 5:8, 2:4)]
+
+# add column for menin list
+mll.fc$menin_list <- ifelse(mll.fc$ENSEMBL %in% menin$V4, "TRUE", "FALSE")
+# column for bivalent list
+mll.fc$bivalent_list <- ifelse(mll.fc$ENSEMBL %in% bivalent$ENSEMBL, "TRUE", "FALSE")
+
+# write full table
+write.table(
+	mll.fc,
+	file.path(ref.dir, 'CSCR04_CnR_MLL_FC_table.txt'),
+	sep = '\t',
+	col.names = TRUE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+# make bed only and write out
+mll.bed <- mll.fc[, c(3:5, 8, 1)]
+write.table(
+	mll.bed,
+	file.path(ref.dir, 'CSCR04_CnR_MLL_FC.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# make DT heatmaps with new MLL FC
+```{bash}
+# run from MLL project dir
+sbatch scripts/DTMatrix_CSCR04MLL1_FC.sbatch
+```
+
+# now with EEDandMEN KO vs EEDKO
+```{r}
+# get CSCR04 samples only
+mll.norm <- countsNorm[ , c("EEDkoANDMEN1ko_MLL1_S15", "EEDko_MLL1_S14")]
+
+# annotate fc list
+# add coordinates to table
+chr.pos <- strsplit2(rownames(mll.norm), ":")
+mll.norm$Chr <- chr.pos[,1]
+start.end <- strsplit2(chr.pos[,2], "-")
+mll.norm$Start <- as.numeric(start.end[,1])
+mll.norm$End <- as.numeric(start.end[,2])
+# remove those with 0 reads in WT
+mll.norm <- mll.norm[-which(mll.norm[, 2] == 0), ]
+
+# make genomic ranges object for annotation
+gr.mll.table <- with(mll.norm, GRanges(Chr, IRanges(start=Start, end=End)))
+seqlevelsStyle(gr.mll.table) <- "UCSC"
+mll.ann <- annotatePeak(gr.mll.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.ann.table <- as.data.frame(mll.ann)
+mll.counts.table <- cbind(mll.norm, mll.ann.table)
+# fix names
+intron <- which(substr(mll.counts.table$annotation, 1, 6) == "Intron")
+mll.counts.table$annotation[intron] <- "Intron"
+exon <- which(substr(mll.counts.table$annotation, 1, 4) == "Exon")
+mll.counts.table$annotation[exon] <- "Exon"
+
+# limit to gene body +1kbp and sum reads
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+# keep only reads and ensg 
+mll.counts <- mll.counts.table[mll.counts.table$annotation %in% keep, c(1:2, 20)]
+# make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+mll.counts <- mll.counts %>% group_by(ENSEMBL) %>% summarize_all(sum)
+mll.counts <- as.data.frame(mll.counts[-which(is.na(mll.counts$ENSEMBL)), ])
+# get new FC of summed reads 
+mll.counts$FC <- mll.counts$EEDkoANDMEN1ko_MLL1_S15/mll.counts$EEDko_MLL1_S14
+
+# add coordinates for gene body only (for DT)
+ensg.coord <- unique(mll.counts.table[which(mll.counts.table$ENSEMBL %in% mll.counts$ENSEMBL), c(12:14, 20:21)])
+# get largest possible transcript coordinates for each gene
+genes.coord <- NULL
+for(ensg in unique(ensg.coord$ENSEMBL)){
+  ensg.sub <- subset(ensg.coord, ENSEMBL == ensg)
+  ens.pos <- cbind(ensg.sub$ENSEMBL[1], ensg.sub$SYMBOL[1], ensg.sub$geneChr[1], min(ensg.sub$geneStart), max(ensg.sub$geneEnd))
+  genes.coord <- rbind(genes.coord, ens.pos)
+}
+colnames(genes.coord) <- c("ENSEMBL", "SYMBOL", "Chr", "Start", "End")
+
+mll.counts.coords <- merge(mll.counts, genes.coord)
+# sort by descending FC and reorder columns
+mll.fc <- mll.counts.coords[order(mll.counts.coords$FC, decreasing = TRUE), c(1, 5:8, 2:4)]
+
+# add column for menin list
+mll.fc$menin_list <- ifelse(mll.fc$ENSEMBL %in% menin$V4, "TRUE", "FALSE")
+# column for bivalent list
+mll.fc$bivalent_list <- ifelse(mll.fc$ENSEMBL %in% bivalent$ENSEMBL, "TRUE", "FALSE")
+
+# write full table
+write.table(
+	mll.fc,
+	file.path(ref.dir, '2KOv1KO_CnR_MLL_FC_table.txt'),
+	sep = '\t',
+	col.names = TRUE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+# make bed only and write out
+mll.bed <- mll.fc[, c(3:5, 8, 1)]
+write.table(
+	mll.bed,
+	file.path(ref.dir, '2KOv1KO_CnR_MLL_FC.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# make DT heatmaps with new MLL FC
+```{bash}
+# run from MLL project dir
+sbatch scripts/DTMatrix_2KOv1KO_MLL1_FC.sbatch
+```
+
+# make DT heatmaps with new VTP FC bed from ChIP_2203 data
+```{bash}
+# run from MLL project dir
+sbatch scripts/DTMatrix_VTP_MLL1_FC.sbatch
+```
+
+# make DT heatmaps with new VTP FC bed from ChIP_2203 data
+```{bash}
+# run from MLL project dir
+sbatch scripts/DTMatrix_COMBOvEPZ_MLL1_FC.sbatch
+```
+
+# make separate bed files for MLL up/common/down (from CSCR04 cnrt bdgdiff) to make DT heatmaps
+```{r}
+# get gene coords fpr those with greater KO binding
+diff.up <- fread(file.path(cnr.diff.dir, "diff_MEN1KOvCAS_MLL1_c3.0_cond1.bed"))
+
+# fix ann names
+intron <- which(substr(diff.up$annotation, 1, 6) == "Intron")
+diff.up$annotation[intron] <- "Intron"
+exon <- which(substr(diff.up$annotation, 1, 4) == "Exon")
+diff.up$annotation[exon] <- "Exon"
+
+# only keep regions of interest
+diff.up <- diff.up[diff.up$annotation %in% keep, ]
+# remove NAs
+diff.up <- diff.up[-which(is.na(diff.up$ENSEMBL)), ]
+
+# only need min/max for all possible transcripts
+genes.coord <- NULL
+for(ensg in unique(diff.up$ENSEMBL)){
+  ensg.sub <- subset(diff.up, ENSEMBL == ensg)
+  ens.pos <- cbind(ensg.sub$geneChr[1], min(ensg.sub$geneStart), max(ensg.sub$geneEnd), ensg.sub$ENSEMBL[1])
+  genes.coord <- rbind(genes.coord, ens.pos)
+}
+
+write.table(
+	genes.coord,
+	file.path(ref.dir, 'diff_MLL_MENKO.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+
+# now common genes
+diff.com <- fread(file.path(cnr.diff.dir, "diff_MEN1KOvCAS_MLL1_c3.0_common.bed"))
+
+# fix ann names
+intron <- which(substr(diff.com$annotation, 1, 6) == "Intron")
+diff.com$annotation[intron] <- "Intron"
+exon <- which(substr(diff.com$annotation, 1, 4) == "Exon")
+diff.com$annotation[exon] <- "Exon"
+
+# only keep regions of interest
+diff.com <- diff.com[diff.com$annotation %in% keep, ]
+# remove NAs
+diff.com <- diff.com[-which(is.na(diff.com$ENSEMBL)), ]
+
+# only need min/max for all possible transcripts
+genes.coord <- NULL
+for(ensg in unique(diff.com$ENSEMBL)){
+  ensg.sub <- subset(diff.com, ENSEMBL == ensg)
+  ens.pos <- cbind(ensg.sub$geneChr[1], min(ensg.sub$geneStart), max(ensg.sub$geneEnd), ensg.sub$ENSEMBL[1])
+  genes.coord <- rbind(genes.coord, ens.pos)
+}
+
+write.table(
+	genes.coord,
+	file.path(ref.dir, 'diff_MLL_common.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+
+# now down genes
+diff.down <- fread(file.path(cnr.diff.dir, "diff_MEN1KOvCAS_MLL1_c3.0_cond2.bed"))
+
+# fix ann names
+intron <- which(substr(diff.down$annotation, 1, 6) == "Intron")
+diff.down$annotation[intron] <- "Intron"
+exon <- which(substr(diff.down$annotation, 1, 4) == "Exon")
+diff.down$annotation[exon] <- "Exon"
+
+# only keep regions of interest
+diff.down <- diff.down[diff.down$annotation %in% keep, ]
+# remove NAs
+diff.down <- diff.down[-which(is.na(diff.down$ENSEMBL)), ]
+
+# only need min/max for all possible transcripts
+genes.coord <- NULL
+for(ensg in unique(diff.down$ENSEMBL)){
+  ensg.sub <- subset(diff.down, ENSEMBL == ensg)
+  ens.pos <- cbind(ensg.sub$geneChr[1], min(ensg.sub$geneStart), max(ensg.sub$geneEnd), ensg.sub$ENSEMBL[1])
+  genes.coord <- rbind(genes.coord, ens.pos)
+}
+
+write.table(
+	genes.coord,
+	file.path(ref.dir, 'diff_MLL_CAS.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# submit DT heatmap for new beds
+```{bash}
+sbatch scripts/DTMatrix_3cat_MLL1.sbatch
+```
+
+# make table of MLL FC with menin and bivalent list indicators
+```{r}
+# get MLL FC table
+mll.fc <- fread(file.path(ref.dir, 'CSCR04_CnR_MLL_FC_table.txt'))
+
+# add column for diff binding up/common/down
+mll.fc$diff_binding <- ifelse(mll.fc$ENSEMBL %in% diff.down$ENSEMBL, "DOWN", "NONE")
+mll.fc$diff_binding[which(mll.fc$ENSEMBL %in% diff.com$ENSEMBL)] <- "COMMON"
+mll.fc$diff_binding[which(mll.fc$ENSEMBL %in% diff.up$ENSEMBL)] <- "UP"
+
+# write table
+write.table(
+	mll.fc,
+	file.path(ref.dir, 'MLL_FC_menin_bivalent_table.txt'),
+	sep = '\t',
+	col.names = TRUE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# plot distribution of reads for WT and KO to determine cutoff for new heatmaps
+```{r}
+# plot WT norm reads per peak
+pdf(file.path(plots.dir, paste0("Bar_dist_RiP_CSCR04_WT_MLL.pdf")))
+barplot(
+  sort(countsNorm$CAS_MLL1_S12), 
+  col = "steelblue", 
+  border = "steelblue", 
+  xlab = "CAS Peaks", 
+  ylab = "Normalised Reads in Peaks", 
+  bty = "L"
+  )
+dev.off()
+
+# Now KO norm reads per peak
+pdf(file.path(plots.dir, paste0("Bar_dist_RiP_CSCR04_KO_MLL.pdf")))
+barplot(
+  sort(countsNorm$MEN1c4_MLL1_S13), 
+  col = "steelblue", 
+  border = "steelblue", 
+  xlab = "MEN1KO Peaks", 
+  ylab = "Normalised Reads in Peaks", 
+  bty = "L"
+  )
+dev.off()
+```
+
+# based on plots start with 5RPM and 1RPM as cut off for peaks to include, then make up/down bed files
+```{r}
+mll.norm <- countsNorm[ , c("MEN1c4_MLL1_S13", "CAS_MLL1_S12")]
+
+# annotate fc list
+# add coordinates to table
+chr.pos <- strsplit2(rownames(mll.norm), ":")
+mll.norm$Chr <- chr.pos[,1]
+start.end <- strsplit2(chr.pos[,2], "-")
+mll.norm$Start <- as.numeric(start.end[,1])
+mll.norm$End <- as.numeric(start.end[,2])
+# remove those with 0 reads in WT
+mll.norm <- mll.norm[-which(mll.norm[, 2] == 0), ]
+
+# make genomic ranges object for annotation
+gr.mll.table <- with(mll.norm, GRanges(Chr, IRanges(start=Start, end=End)))
+seqlevelsStyle(gr.mll.table) <- "UCSC"
+mll.ann <- annotatePeak(gr.mll.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.ann.table <- as.data.frame(mll.ann)
+mll.counts.table <- cbind(mll.norm, mll.ann.table)
+# fix names
+intron <- which(substr(mll.counts.table$annotation, 1, 6) == "Intron")
+mll.counts.table$annotation[intron] <- "Intron"
+exon <- which(substr(mll.counts.table$annotation, 1, 4) == "Exon")
+mll.counts.table$annotation[exon] <- "Exon"
+
+# limit to genic regions
+mll.counts.ann <- mll.counts.table[mll.counts.table$annotation %in% keep, ]
+# subset to both samples >5RPM
+mll.5rpm <- subset(mll.counts.ann, MEN1c4_MLL1_S13 >= 5 & CAS_MLL1_S12 >= 5)
+# subset to both samples >1RPM
+mll.1rpm <- subset(mll.counts.ann, MEN1c4_MLL1_S13 >= 1 & CAS_MLL1_S12 >= 1)
+
+# put in bed order
+bed.5rpm <- mll.5rpm[, c(3:5, 1:2, 20:21)]
+bed.1rpm <- mll.1rpm[, c(3:5, 1:2, 20:21)]
+#separate into up/down
+bed.5rpm.up <- bed.5rpm[which(bed.5rpm$MEN1c4_MLL1_S13 > (bed.5rpm$CAS_MLL1_S12+1)), ]
+bed.5rpm.down <- bed.5rpm[which(bed.5rpm$MEN1c4_MLL1_S13 < (bed.5rpm$CAS_MLL1_S12-1)), ]
+bed.1rpm.up <- bed.1rpm[which(bed.1rpm$MEN1c4_MLL1_S13 > (bed.1rpm$CAS_MLL1_S12+1)), ]
+bed.1rpm.down <- bed.1rpm[which(bed.1rpm$MEN1c4_MLL1_S13 < (bed.1rpm$CAS_MLL1_S12-1)), ]
+
+# write out
+write.table(
+	bed.5rpm.up,
+	file.path(ref.dir, '5RPM_MLL_UP.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.5rpm.down,
+	file.path(ref.dir, '5RPM_MLL_DOWN.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.1rpm.up,
+	file.path(ref.dir, '1RPM_MLL_UP.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.1rpm.down,
+	file.path(ref.dir, '1RPM_MLL_DOWN.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# submit heatmap scripts with new bed files
+```{bash}
+sbatch scripts/DTMatrix_5RPM_MLL1.sbatch
+sbatch scripts/DTMatrix_1RPM_MLL1.sbatch
+
+# now separate out each mark
+sbatch scripts/DTMatrix_5RPM_MLL1_only.sbatch
+sbatch scripts/DTMatrix_1RPM_MLL1_only.sbatch
+```
+
+# use both CSCR experiments for bed files
+```{r}
+# use both CSCR01 and CSCR04 for bed files
+mll.norm <- countsNorm[ , c("MEN1c4_KO_MLL1_S7", "MEN1c4_MLL1_S13", "CAS_MLL1_S2", "CAS_MLL1_S12")]
+
+# add coordinates to table
+chr.pos <- strsplit2(rownames(mll.norm), ":")
+mll.norm$Chr <- chr.pos[,1]
+start.end <- strsplit2(chr.pos[,2], "-")
+mll.norm$Start <- as.numeric(start.end[,1])
+mll.norm$End <- as.numeric(start.end[,2])
+# remove those with 0 reads in both WT
+mll.norm <- mll.norm[-which(rowSums(mll.norm[, 3:4]) == 0), ]
+
+# make genomic ranges object for annotation
+gr.mll.table <- with(mll.norm, GRanges(Chr, IRanges(start=Start, end=End)))
+seqlevelsStyle(gr.mll.table) <- "UCSC"
+mll.ann <- annotatePeak(gr.mll.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.ann.table <- as.data.frame(mll.ann)
+mll.counts.table <- cbind(mll.norm, mll.ann.table)
+# fix names
+intron <- which(substr(mll.counts.table$annotation, 1, 6) == "Intron")
+mll.counts.table$annotation[intron] <- "Intron"
+exon <- which(substr(mll.counts.table$annotation, 1, 4) == "Exon")
+mll.counts.table$annotation[exon] <- "Exon"
+
+# limit to genic regions
+mll.counts <- mll.counts.table[mll.counts.table$annotation %in% keep, ]
+
+# subset to all samples >5RPM
+mll.5rpm <- subset(mll.counts, MEN1c4_KO_MLL1_S7 >= 5 & MEN1c4_MLL1_S13 >= 5 & CAS_MLL1_S2 >= 5 & CAS_MLL1_S12 >= 5)
+# subset to all samples >1RPM
+mll.1rpm <- subset(mll.counts, MEN1c4_KO_MLL1_S7 >= 1 & MEN1c4_MLL1_S13 >= 1 & CAS_MLL1_S2 >= 1 & CAS_MLL1_S12 >= 1)
+
+# put in bed order
+bed.5rpm <- mll.5rpm[, c(5:7, 1:4)]
+bed.1rpm <- mll.1rpm[, c(5:7, 1:4)]
+#separate into up/down
+bed.5rpm.up <- bed.5rpm[which(bed.5rpm$MEN1c4_MLL1_S13 > (bed.5rpm$CAS_MLL1_S12+1) & bed.5rpm$MEN1c4_KO_MLL1_S7 > (bed.5rpm$CAS_MLL1_S2+1)), ]
+bed.5rpm.down <- bed.5rpm[which(bed.5rpm$MEN1c4_MLL1_S13 < (bed.5rpm$CAS_MLL1_S12-1) & bed.5rpm$MEN1c4_KO_MLL1_S7 < (bed.5rpm$CAS_MLL1_S2-1)), ]
+bed.1rpm.up <- bed.1rpm[which(bed.1rpm$MEN1c4_MLL1_S13 > (bed.1rpm$CAS_MLL1_S12+1) & bed.1rpm$MEN1c4_KO_MLL1_S7 > (bed.1rpm$CAS_MLL1_S2+1)), ]
+bed.1rpm.down <- bed.1rpm[which(bed.1rpm$MEN1c4_MLL1_S13 < (bed.1rpm$CAS_MLL1_S12-1) & bed.1rpm$MEN1c4_KO_MLL1_S7 < (bed.1rpm$CAS_MLL1_S2-1)), ]
+
+# write out
+write.table(
+	bed.5rpm.up,
+	file.path(ref.dir, 'merged_5RPM_MLL_UP.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.5rpm.down,
+	file.path(ref.dir, 'merged_5RPM_MLL_DOWN.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.1rpm.up,
+	file.path(ref.dir, 'merged_1RPM_MLL_UP.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.1rpm.down,
+	file.path(ref.dir, 'merged_1RPM_MLL_DOWN.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# submit DT job for 1RPM beds above. 5RPM up only has 5 peaks that meet criteria.
+```{bash}
+sbatch scripts/DTMatrix_merged_1RPM_MLL1_only.sbatch
+sbatch scripts/DTMatrix_merged_1RPM_K4_only.sbatch
+sbatch scripts/DTMatrix_merged_1RPM_K27_only.sbatch
+sbatch scripts/DTMatrix_merged_1RPM_SUZ12_only.sbatch
+sbatch scripts/DTMatrix_merged_1RPM_K119_only.sbatch
+sbatch scripts/DTMatrix_merged_1RPM_RING1B_only.sbatch
+
+# now all together with separate scales 
+sbatch scripts/DTMatrix_merged1RPM_MLL1.sbatch
+```
+
+# make new beds based on FC and diff of CSCR01, only 1RPM in either required
+```{r}
+mll.norm <- countsNorm[ , c("MEN1c4_KO_MLL1_S7", "CAS_MLL1_S2")]
+# annotate fc list
+# add coordinates to table
+chr.pos <- strsplit2(rownames(mll.norm), ":")
+mll.norm$Chr <- chr.pos[,1]
+start.end <- strsplit2(chr.pos[,2], "-")
+mll.norm$Start <- as.numeric(start.end[,1])
+mll.norm$End <- as.numeric(start.end[,2])
+# remove those with 0 reads in WT
+mll.norm <- mll.norm[-which(mll.norm[, 2] == 0 | mll.norm[, 2] == 0), ]
+
+# make genomic ranges object for annotation
+gr.mll.table <- with(mll.norm, GRanges(Chr, IRanges(start=Start, end=End)))
+seqlevelsStyle(gr.mll.table) <- "UCSC"
+mll.ann <- annotatePeak(gr.mll.table, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.ann.table <- as.data.frame(mll.ann)
+mll.counts.table <- cbind(mll.norm, mll.ann.table)
+# fix names
+intron <- which(substr(mll.counts.table$annotation, 1, 6) == "Intron")
+mll.counts.table$annotation[intron] <- "Intron"
+exon <- which(substr(mll.counts.table$annotation, 1, 4) == "Exon")
+mll.counts.table$annotation[exon] <- "Exon"
+
+# limit to genic regions
+mll.counts.ann <- mll.counts.table[mll.counts.table$annotation %in% keep, ]
+# subset to both samples >5RPM
+mll.5rpm <- subset(mll.counts.ann, MEN1c4_KO_MLL1_S7 >= 5 | CAS_MLL1_S2 >= 5)
+# subset to both samples >1RPM
+mll.1rpm <- subset(mll.counts.ann, MEN1c4_KO_MLL1_S7 >= 1 | CAS_MLL1_S2 >= 1)
+
+# put in bed order
+bed.5rpm <- mll.5rpm[, c(3:5, 1:2, 20:21)]
+bed.1rpm <- mll.1rpm[, c(3:5, 1:2, 20:21)]
+#separate into up/down by at least 1rpm
+bed.5rpm.up <- bed.5rpm[which(bed.5rpm$MEN1c4_KO_MLL1_S7 > (bed.5rpm$CAS_MLL1_S2+1)), ]
+bed.5rpm.down <- bed.5rpm[which(bed.5rpm$MEN1c4_KO_MLL1_S7 < (bed.5rpm$CAS_MLL1_S2-1)), ]
+bed.1rpm.up <- bed.1rpm[which(bed.1rpm$MEN1c4_KO_MLL1_S7 > (bed.1rpm$CAS_MLL1_S2+1)), ]
+bed.1rpm.down <- bed.1rpm[which(bed.1rpm$MEN1c4_KO_MLL1_S7 < (bed.1rpm$CAS_MLL1_S2-1)), ]
+
+# write out
+write.table(
+	bed.5rpm.up,
+	file.path(ref.dir, 'CSCR01_5RPM_MLL_UP.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.5rpm.down,
+	file.path(ref.dir, 'CSCR01_5RPM_MLL_DOWN.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.1rpm.up,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_UP.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.1rpm.down,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_DOWN.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+# get FC for each category and rank bed accordingly
+bed.5rpm$FC <- bed.5rpm$MEN1c4_KO_MLL1_S7/bed.5rpm$CAS_MLL1_S2
+bed.5rpm <- bed.5rpm[order(bed.5rpm$FC, decreasing = TRUE), ]
+
+bed.1rpm$FC <- bed.1rpm$MEN1c4_KO_MLL1_S7/bed.1rpm$CAS_MLL1_S2
+bed.1rpm <- bed.1rpm[order(bed.1rpm$FC, decreasing = TRUE), ]
+
+# write out new beds
+write.table(
+	bed.5rpm,
+	file.path(ref.dir, 'CSCR01_5RPM_MLL_FC.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+write.table(
+	bed.1rpm,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_FC.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# submit DT job for 1RPM beds above. 5RPM up only has 25 peaks that meet criteria.
+```{bash}
+# all together with separate scales 
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1.sbatch
+# also MLL only
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_only.sbatch
+# now ordered by FC
+sbatch scripts/DTMatrix_CSCR01_1RPM_FC_MLL1.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_FC_MLL1_only.sbatch
+
+# 5rpm as well
+sbatch scripts/DTMatrix_CSCR01_5RPM_FC_MLL1.sbatch
+sbatch scripts/DTMatrix_CSCR01_5RPM_FC_MLL1_only.sbatch
+
+# get each mark on its own plot to check autoscaling
+sbatch scripts/DTMatrix_CSCR01_1RPM_K4_only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_K27_only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_SUZ12_only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_K119_only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_RING1B_only.sbatch
+
+# make all marks HM for UP peaks only
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_UP.sbatch
+```
+
+# check overlap of CSCR reps
+```{r}
+# get each 1RPM UP peak file
+cscr01.up <- fread(file.path(ref.dir, 'CSCR01_1RPM_MLL_UP.bed'))
+cscr04.up <- fread(file.path(ref.dir, '1RPM_MLL_UP.bed'))
+require("gplots")
+venn.data <- list("CSCR01" = cscr01.up$V7, "CSCR04" = cscr04.up$V7)
+venn(venn.data)
+```
+
+# make bed of up genes on bivalent list and make heatmap
+```{r}
+cscr01.bi <- subset(cscr01.up, V7 %in% bivalent$SYMBOL)
+
+write.table(
+	cscr01.bi,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_UP_BI.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+```{bash}
+# make all marks HM for UP peaks bivalent only
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_UP_BI.sbatch
+```
+
+# use bedtools intersect to get C&T K4 counts per peaks in bed file
+```{bash}
+module load bedtools/2.27.1
+bedtools intersect -a reference_files/CSCR01_1RPM_MLL_UP.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam -wa -c > reference_files/CSCR01_1RPM_MLL_UP_K4_counts.bed
+```
+
+# add bivalency to bed for Christina and make bed for K4>0
+```{r}
+up.k4.bed <- fread(file.path(ref.dir, "CSCR01_1RPM_MLL_UP_K4_counts.bed"))
+up.k4.bed$bivalent <- ifelse(up.k4.bed$V7 %in% bivalent$SYMBOL, "TRUE", "FALSE")
+
+write.table(
+	up.k4.bed,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_UP_K4_BI.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+up.k4.only.bed <- subset(up.k4.bed, V8 > 0)
+write.table(
+	up.k4.only.bed,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_UP_K4only.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# make HM with new bed
+```{bash}
+# make all marks HM for UP peaks bivalent only
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_UP_K4only.sbatch
+```
+
+# get new 2of3 bivalent list and get % of gain/loss peaks in biv list
+```{r}
+# get new bi list
+comb.bi <- fread("../CUTandTAG_220328_NB501056_0777_AHNGTWBGXL/bivalent_genes/K562_bivalent_genes_2of3.txt")
+# up list already loaded, so get down list as well
+cscr01.down <- fread(file.path(ref.dir, 'CSCR01_1RPM_MLL_DOWN.bed'))
+sum(cscr01.up$V6 %in% comb.bi$ENSEMBL)/nrow(cscr01.up)
+sum(cscr01.down$V6 %in% comb.bi$ENSEMBL)/nrow(cscr01.down)
+sum(up.k4.only.bed$V6 %in% comb.bi$ENSEMBL)/nrow(up.k4.only.bed)
+```
+
+# use bedtools intersect to get C&T KO K4 counts per peaks in DOWN bed file
+```{bash}
+module load bedtools/2.27.1
+bedtools intersect -a reference_files/CSCR01_1RPM_MLL_DOWN.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam -wa -c > reference_files/CSCR01_1RPM_MLL_DOWN_K4_counts.bed
+```
+
+# make heatmap for down genes in same fashion as up
+```{r}
+down.k4.bed <- fread(file.path(ref.dir, "CSCR01_1RPM_MLL_DOWN_K4_counts.bed"))
+
+down.k4.only.bed <- subset(down.k4.bed, V8 > 0)
+write.table(
+	down.k4.only.bed,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_DOWN_K4only.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# make HM with new bed and same for MENi exps
+```{bash}
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_DOWN_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_DOWN_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_UP_K4only.sbatch
+
+# run each mark separately to get ideal max values
+sbatch scripts/DTMatrix_CSCR01MLLonly_1RPM_MLL1_UP_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01K4_1RPM_MLL1_UP_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01K27_1RPM_MLL1_UP_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01SUZ12_1RPM_MLL1_UP_K4only.sbatch
+# rerun for all marks with new max values
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_UP_K4only.sbatch
+
+# same for down
+sbatch scripts/DTMatrix_CSCR01MLL_1RPM_MLL1_DOWN_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01K4_1RPM_MLL1_DOWN_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01K27_1RPM_MLL1_DOWN_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01SUZ12_1RPM_MLL1_DOWN_K4only.sbatch
+# rerun for all marks with new max values
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_DOWN_K4only.sbatch
+
+# same as above for MENi plots also
+sbatch scripts/DTMatrix_CSCR01MLL_1RPM_MLL1_Menin_UP_K4only.sbatch
+# other values same as above, rerun with all new values
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_UP_K4only.sbatch
+# same for down
+sbatch scripts/DTMatrix_CSCR01MLL_1RPM_MLL1_Menin_DOWN_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_DOWN_K4only.sbatch
+
+# use bedtools intersect to get C&T CAS K4 counts per peaks in DOWN bed file
+module load bedtools/2.27.1
+bedtools intersect -a reference_files/CSCR01_1RPM_MLL_DOWN.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-CAS-H3K4me3_S2.sort.bam -wa -c > reference_files/CSCR01_1RPM_MLL_DOWN_CAS_K4_counts.bed
+```
+
+# make bed and subsequent heatmap for down genes in CAS K4
+```{r}
+cas.k4.bed <- fread(file.path(ref.dir, "CSCR01_1RPM_MLL_DOWN_CAS_K4_counts.bed"))
+# get Hg normalised counts
+cas.k4.bed$V8 <- cas.k4.bed$V8 * 0.07712827
+
+# get samples that have >1RPM in CAS
+cas.k4.only.bed <- subset(down.k4.bed, V8 >= 1)
+write.table(
+	cas.k4.only.bed,
+	file.path(ref.dir, "CSCR01_1RPM_MLL_DOWN_CAS_K4only.bed"),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# compare up/down MLL gene lists from heatmaps to DE from prev RNAseq
+```{r}
+de.men <- fread("../RNAseq_190301_NB501056_0277_AH53JJBGXB_analysis/Results/DE_MEN_noIFN_vs_Safe_noIFN.txt")
+
+up.mll.de <- merge(up.k4.only.bed, de.men, by.x = c("V6", "V7"), by.y = c("V1", "hgnc_symbol"), all.x = TRUE)
+# remove redundant/unncessary columns and name as needed
+up.mll.de <- up.mll.de[, -c(7:9)]
+colnames(up.mll.de)[1:7] <- c("SYMBOL", "peak.chr", "peak.start", "peak.end", "CAS.MLL.RiP", "KO.MLL.RiP", "ENSG")
+write.table(
+  up.mll.de,
+  file.path(ref.dir, "MLL_UP_DE_comb_table.txt"),
+  sep = "\t",
+  col.names = TRUE,
+  row.names = FALSE,
+  quote = FALSE
+)
+
+down.mll.de <- merge(down.k4.only.bed, de.men, by.x = c("V6", "V7"), by.y = c("V1", "hgnc_symbol"), all.x = TRUE)
+# remove redundant/unncessary columns and name as needed
+down.mll.de <- down.mll.de[, -c(8:9)]
+colnames(down.mll.de)[1:7] <- c("ENSG", "SYMBOL", "peak.chr", "peak.start", "peak.end", "CAS.MLL.RiP", "KO.MLL.RiP")
+write.table(
+  down.mll.de,
+  file.path(ref.dir, "MLL_DOWN_DE_comb_table.txt"),
+  sep = "\t",
+  col.names = TRUE,
+  row.names = FALSE,
+  quote = FALSE
+)
+```
+
+# get number of reads in peaks for KO and CAS for up bed
+```{bash}
+module load bedtools/2.27.1
+
+bedtools intersect -a reference_files/CSCR01_1RPM_MLL_UP.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam -wa -c > reference_files/CSCR01_1RPM_MLL_UP_K4_counts.bed
+
+bedtools intersect -a reference_files/CSCR01_1RPM_MLL_UP_K4_counts.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-CAS-H3K4me3_S2.sort.bam -wa -c > reference_files/CSCR01_1RPM_MLL_UP_KO_CAS_K4_counts.bed
+
+# add to prev made bed as unnormalised
+bedtools intersect -a reference_files/CSCR01_1RPM_MLL_DOWN_K4only.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-CAS-H3K4me3_S2.sort.bam -wa -c > reference_files/CSCR01_1RPM_MLL_DOWN_CAS_K4_counts.bed
+```
+
+# make bed file ordered by K4 FC for new heatmaps
+```{r}
+# get above bed with both k4 samples reads 
+up.k4.fc.bed <- fread("reference_files/CSCR01_1RPM_MLL_UP_KO_CAS_K4_counts.bed")
+# only keep those with at least 1 read in KO
+up.k4.fc.bed <- up.k4.fc.bed[up.k4.fc.bed$V8 > 0, ]
+# get pseudocounted and normalised K4 reads
+up.k4.fc.bed$V8 <- (up.k4.fc.bed$V8 + 0.5) * 0.081493
+up.k4.fc.bed$V9 <- (up.k4.fc.bed$V9 + 0.5) * 0.07712827
+# get k4 fc and set this as order
+up.k4.fc.bed$FC <- up.k4.fc.bed$V8/up.k4.fc.bed$V9
+up.k4.fc.bed <- up.k4.fc.bed[order(up.k4.fc.bed$FC, decreasing = TRUE),]
+# save new bed
+write.table(
+	up.k4.fc.bed,
+	file.path(ref.dir, "CSCR01_1RPM_MLL_UP_K4FCorder.bed"),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+# now same for down bed file
+down.k4.fc.bed <- fread("reference_files/CSCR01_1RPM_MLL_DOWN_CAS_K4_counts.bed")
+# KO zeros already removed
+# get pseudocounted and normalised K4 reads
+down.k4.fc.bed$V8 <- (down.k4.fc.bed$V8 + 0.5) * 0.081493
+down.k4.fc.bed$V9 <- (down.k4.fc.bed$V9 + 0.5) * 0.07712827
+# get k4 fc and set this as order
+down.k4.fc.bed$FC <- down.k4.fc.bed$V8/down.k4.fc.bed$V9
+down.k4.fc.bed <- down.k4.fc.bed[order(down.k4.fc.bed$FC, decreasing = TRUE),]
+# save new bed
+write.table(
+	down.k4.fc.bed,
+	file.path(ref.dir, "CSCR01_1RPM_MLL_DOWN_K4FCorder.bed"),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# run new heatmaps
+```{bash}
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_UP_K4FCorder.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_UP_K4FCorder.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_DOWN_K4FCorder.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_DOWN_K4FCorder.sbatch
+```
+
+# make new MLL up/down bed files +/2kbp from TSS
+```{r}
+# limit to genic regions
+mll.counts.ann <- mll.counts.table[abs(mll.counts.table$distanceToTSS) <= 2000, ]
+# subset to both samples >1RPM
+mll.1rpm <- subset(mll.counts.ann, MEN1c4_KO_MLL1_S7 >= 1 | CAS_MLL1_S2 >= 1)
+# remove experiment not being used
+mll.1rpm <- mll.1rpm[, -c(2, 4)]
+# put in bed order
+bed.1rpm <- mll.1rpm[, c(3:5, 1:2, 20:21)]
+#separate into up/down by at least 1rpm
+bed.1rpm.up <- bed.1rpm[which(bed.1rpm$MEN1c4_KO_MLL1_S7 > (bed.1rpm$CAS_MLL1_S2+1)), ]
+bed.1rpm.down <- bed.1rpm[which(bed.1rpm$MEN1c4_KO_MLL1_S7 < (bed.1rpm$CAS_MLL1_S2-1)), ]
+
+# write out beds for K4 intersect
+write.table(
+  bed.1rpm.up,
+	file.path(ref.dir, "1RPM_MLL_UP_K4only_TSS2k.bed"),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+)
+write.table(
+  bed.1rpm.down,
+	file.path(ref.dir, "1RPM_MLL_DOWN_K4Fonly_TSS2k.bed"),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+)
+```
+
+# do bedtools intersect with K$ bed to limit to those with K4
+```{bash}
+module load bedtools/2.27.1
+
+bedtools intersect -a reference_files/1RPM_MLL_UP_K4only_TSS2k.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam -wa -c > reference_files/1RPM_MLL_UP_K4only_TSS2k_K4_counts.bed
+
+bedtools intersect -a reference_files/1RPM_MLL_DOWN_K4Fonly_TSS2k.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.sort.bam -wa -c > reference_files/1RPM_MLL_DOWN_K4only_TSS2k_K4_counts.bed
+```
+
+# now get only those with k4 counts
+```{r}
+tss.k4.up <- fread(file.path(ref.dir, "1RPM_MLL_UP_K4only_TSS2k_K4_counts.bed"))
+
+# get samples that have >1 read in K4
+tss.k4.up <- subset(tss.k4.up, V8 >= 0)
+write.table(
+	tss.k4.up,
+	file.path(ref.dir, "CSCR01_1RPM_MLL_UP_K4only_TSS2k_K4_counts.bed"),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+
+tss.k4.down <- fread(file.path(ref.dir, "1RPM_MLL_DOWN_K4only_TSS2k_K4_counts.bed"))
+
+# same for down
+tss.k4.down <- subset(tss.k4.down, V8 >= 0)
+write.table(
+	tss.k4.down,
+	file.path(ref.dir, "CSCR01_1RPM_MLL_DOWN_K4only_TSS2k_K4_counts.bed"),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# submit new heatmaps jobs
+```{bash}
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_UP_TSSonly_K4only.sbatch
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_DOWN_TSSonly_K4only.sbatch
+
+# also make profile plot for Menin chip on up and down
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_UPDOWN_K4only.sbatch
+```
+
+# make bed file for remaining "unchanged" MLL peaks to add to Menin up/down plots
+```{r}
+bed.1rpm.same <- bed.1rpm[which(!(bed.1rpm$ENSEMBL %in% bed.1rpm.up$ENSEMBL | bed.1rpm$ENSEMBL %in% bed.1rpm.down$ENSEMBL)), ]
+
+# write out
+write.table(
+	bed.1rpm.same,
+	file.path(ref.dir, 'CSCR01_1RPM_MLL_SAME.bed'),
+	sep = '\t',
+	col.names = FALSE,
+	row.names = FALSE,
+	quote = FALSE
+	)
+```
+
+# added to Menin heatmap script and resubmit
+```{bash}
+sbatch scripts/DTMatrix_CSCR01_1RPM_MLL1_Menin_UPDOWN_K4only.sbatch
+```
+
+# make boxplot with newest (final) bivalent list to correspond with MLL heatmap
+```{r}
+# read in K562 bivalent gene
+bivalent <- fread("../CUTandTAG_220328_NB501056_0777_AHNGTWBGXL/reference_files/CSCT03_CAS_bivalent_genes_2kTSS.bed")
+
+comp <- "MEN1c4KOvCAS_MLL1"
+fip.table <- fread(file.path(fip.dir, paste0(comp, '_cnrt_macs_peaks_fip_lfc_ann_table.txt')))
+# limit to regions of interest
+keep <- c("Promoter (<=1kb)", "3' UTR", "Intron", "Exon", "5' UTR")
+# keep only reads and ensg 
+lfc.table <- fip.table[fip.table$annotation %in% keep, c(1, 2, 18)]
+# make table of data for figure by summing reads in peaks for each gene and getting LFC for total
+lfc.table <- lfc.table %>% group_by(ENSEMBL) %>% summarize_all(sum)
+lfc.table <- as.data.frame(lfc.table[-which(is.na(lfc.table$ENSEMBL)), ])
+# filter for at least 1 psuedo read per million in both
+keep <- which(lfc.table[,2] >= 1 & lfc.table[,3] >= 1)
+lfc.table <- lfc.table[keep,]
+# get new LFC cols 1:2 move to 2:3 in above manipulation
+lfc.table$LFC <- log2(lfc.table[,2]/lfc.table[,3])
+men.data <- lfc.table[lfc.table$ENSEMBL %in% menin$V4,]
+not.men.data <- lfc.table[!(lfc.table$ENSEMBL %in% menin$V4),]
+men.bi.data <- men.data[men.data$ENSEMBL %in% bivalent$V4,]
+men.not.bi.data <- men.data[!(men.data$ENSEMBL %in% bivalent$V4),]
+not.men.bi.data <- not.men.data[not.men.data$ENSEMBL %in% bivalent$V4,]
+not.men.not.bi.data <- not.men.data[!(not.men.data$ENSEMBL %in% bivalent$V4),]
+pdf(file.path(plots.dir, paste0("Boxplot_final_bi_list_1plusnorm_", comp, "_cnrt_macs_peaks.pdf")), height = 8, width = 5)
+boxplot(
+  not.men.not.bi.data$LFC, not.men.bi.data$LFC, men.not.bi.data$LFC, men.bi.data$LFC,
+  names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+  main = paste0(comp, " binding"),
+  ylab = expression(bold(paste("log"[2], " FC"))),
+  col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+  at = c(1, 2, 4, 5),
+  boxwex = 0.5,
+  outline = FALSE,
+  whisklty = 1,
+  cex.axis = 0.7
+)
+abline(h = 0)
+dev.off()
+```
+
+# make 4 exp heatmap for bivalent genes only, ordered by K4
+```{bash}
+sbatch scripts/DTMatrix_All_Exp_bivalentGenes_K4ordered.sbatch
+```
+
+# divide bed file into menin and not, then make another heatmap
+```{r}
+bi.men <- bivalent[which(bivalent$V4 %in% menin$V4),]
+bi.non <- bivalent[-which(bivalent$V4 %in% menin$V4),]
+write.table(
+  bi.men,
+  file.path(ref.dir, "bivalent_menin.bed"),
+  sep = "\t",
+  col.names = FALSE, 
+  row.names = FALSE,
+  quote = FALSE
+)
+write.table(
+  bi.non,
+  file.path(ref.dir, "bivalent_nonmenin.bed"),
+  sep = "\t",
+  col.names = FALSE, 
+  row.names = FALSE,
+  quote = FALSE
+)
+```
+
+# make 4 exp heatmap for bivalent genes divided by menin status, ordered by K4
+```{bash}
+sbatch scripts/DTMatrix_All_Exp_bivalentGenes_menin_K4ordered.sbatch
+# now redo with K4 Chip
+sbatch scripts/DTMatrix_All_Exp_CS05_bivalentGenes_menin_K4ordered.sbatch
+# ChIP also for just bivalent
+sbatch scripts/DTMatrix_All_Exp_CS05_bivalentGenes_K4ordered.sbatch
+# also mll up/down heatmaps with ChIP
+sbatch scripts/DTMatrix_CS05_1RPM_MLL1_UP_TSSonly_K4only.sbatch
+sbatch scripts/DTMatrix_CS05_1RPM_MLL1_DOWN_TSSonly_K4only.sbatch
+```
+
+# final analysis for reviewer 1 regarding bivalency in MLL1 up/down genes
+# make bed of MLL up/down genes TSS +/-2kbp, get reads in K4 and K27 samples from heatmap and convert to RPM
+```{r}
+mll.up <- fread(file.path(ref.dir, "CSCR01_1RPM_MLL_UP_K4only_TSS2k_K4_counts.bed"))
+mll.down <- fread(file.path(ref.dir, "CSCR01_1RPM_MLL_DOWN_K4only_TSS2k_K4_counts.bed"))
+
+mll.up$V1 <- paste0("chr", mll.up$V1)
+mll.up.gr <- with(mll.up, GRanges(V1, IRanges(start=V2, end=V3)))
+mll.up.ann <- annotatePeak(mll.up.gr, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.up.ann.df <- as.data.frame(mll.up.ann)
+mll.up.tss.bed <- cbind(mll.up.ann.df$geneChr, mll.up.ann.df$geneStart-2000, mll.up.ann.df$geneStart+2000, mll.up.ann.df$ENSEMBL, mll.up.ann.df$SYMBOL)
+write.table(
+  mll.up.tss.bed,
+  file.path(ref.dir, "MLL_UP_TSS2K.bed"),
+  sep = "\t",
+  col.names = FALSE,
+  row.names = FALSE,
+  quote = FALSE
+)
+
+mll.down$V1 <- paste0("chr", mll.down$V1)
+mll.down.gr <- with(mll.down, GRanges(V1, IRanges(start=V2, end=V3)))
+mll.down.ann <- annotatePeak(mll.down.gr, TxDb = txdb, annoDb = "org.Hs.eg.db")
+mll.down.ann.df <- as.data.frame(mll.down.ann)
+mll.down.tss.bed <- cbind(mll.down.ann.df$geneChr, mll.down.ann.df$geneStart-2000, mll.down.ann.df$geneStart+2000, mll.down.ann.df$ENSEMBL, mll.down.ann.df$SYMBOL)
+write.table(
+  mll.down.tss.bed,
+  file.path(ref.dir, "MLL_DOWN_TSS2K.bed"),
+  sep = "\t",
+  col.names = FALSE,
+  row.names = FALSE,
+  quote = FALSE
+)
+```
+
+
+# intersect TSS bed with K4 and K27 baseline
+```{bash}
+module load bedtools/2.27.1
+module load samtools/1.9
+
+bedtools intersect -a reference_files/MLL_UP_TSS2K.bed -b ../ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/bam/CS05-CAS-H3K4me3_S2.bam -wa -c > reference_files/MLL_UP_TSS2K_K4.bed
+
+bedtools intersect -a reference_files/MLL_UP_TSS2K_K4.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-CAS-H3K27me3_S6.bam -wa -c > reference_files/MLL_UP_TSS2K_K4_K27.bed
+
+bedtools intersect -a reference_files/MLL_DOWN_TSS2K.bed -b ../ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/bam/CS05-CAS-H3K4me3_S2.bam -wa -c > reference_files/MLL_DOWN_TSS2K_K4.bed
+
+bedtools intersect -a reference_files/MLL_DOWN_TSS2K_K4.bed -b ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-CAS-H3K27me3_S6.bam -wa -c > reference_files/MLL_DOWN_TSS2K_K4_K27.bed
+
+# get coverage for RPMs
+samtools flagstat ../ChIPseq_210623_NB501056_0652_AHTHVNBGXJ/bam/CS05-CAS-H3K4me3_S2.bam
+15881596 + 0 in total (QC-passed reads + QC-failed reads)
+
+samtools flagstat ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/MHC-CSCT03-K562-CAS-H3K27me3_S6.bam
+14594315 + 0 in total (QC-passed reads + QC-failed reads)
+```
+
+# convert to RPM and add column for K4&K27 presence
+```{r}
+mll.up.k4.k27 <- fread(file.path(ref.dir, "MLL_UP_TSS2K_K4_K27.bed"))
+mll.down.k4.k27 <- fread(file.path(ref.dir, "MLL_DOWN_TSS2K_K4_K27.bed"))
+
+mll.up.k4.k27$V6 <- mll.up.k4.k27$V6/15881596 * 10e6
+mll.up.k4.k27$V7 <- mll.up.k4.k27$V7/14594315 * 10e6
+
+mll.down.k4.k27$V6 <- mll.down.k4.k27$V6/15881596 * 10e6
+mll.down.k4.k27$V7 <- mll.down.k4.k27$V7/14594315 * 10e6
+
+mll.up.k4.k27$K4_K27_1RPM <- ifelse(mll.up.k4.k27$V6 > 1 & mll.up.k4.k27$V7 > 1, TRUE, FALSE)
+mll.down.k4.k27$K4_K27_1RPM <- ifelse(mll.down.k4.k27$V6 > 1 & mll.down.k4.k27$V7 > 1, TRUE, FALSE)
+mll.up.k4.k27$K4_K27_2RPM <- ifelse(mll.up.k4.k27$V6 > 2 & mll.up.k4.k27$V7 > 2, TRUE, FALSE)
+mll.down.k4.k27$K4_K27_2RPM <- ifelse(mll.down.k4.k27$V6 > 2 & mll.down.k4.k27$V7 > 2, TRUE, FALSE)
+#mll.up.k4.k27$K4_K27_5RPM <- ifelse(mll.up.k4.k27$V6 > 5 & mll.up.k4.k27$V7 > 5, TRUE, FALSE)
+#mll.down.k4.k27$K4_K27_5RPM <- ifelse(mll.down.k4.k27$V6 > 5 & mll.down.k4.k27$V7 > 5, TRUE, FALSE)
+
+# add colnames and write out
+colnames(mll.up.k4.k27)[1:7] <- c("chr", "start", "end", "ensembl", "symbol", "K4_RPM", "K27_RPM")
+colnames(mll.down.k4.k27)[1:7] <- c("chr", "start", "end", "ensembl", "symbol", "K4_RPM", "K27_RPM")
+
+write.table(
+  mll.up.k4.k27,
+  file.path(ref.dir, "MLL_UP_K4_K27_RPM.txt"),
+  sep = "\t",
+  col.names = TRUE,
+  row.names = FALSE,
+  quote = FALSE
+)
+
+write.table(
+  mll.down.k4.k27,
+  file.path(ref.dir, "MLL_DOWN_K4_K27_RPM.txt"),
+  sep = "\t",
+  col.names = TRUE,
+  row.names = FALSE,
+  quote = FALSE
+)
+```
+
+
+# save session info
+```{r}
+sesh.info <- capture.output(sessionInfo())
+writeLines(
+  sesh.info,
+  file.path(project.dir, "session-info", paste0(Sys.Date(), "_CutAndTag_analysis_220201.txt"))
+)
+```
