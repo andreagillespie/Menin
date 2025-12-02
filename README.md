@@ -15,3 +15,5 @@ CUTandRUN_220310: K562s w/CAS, MEN1-KO, EED-KO, MEN1-KO_EED-KO, AEBP2-KO, MTF2-K
 CUTandTAG_220201: K562s w/CAS, MEN1-KO, EED-KO, & PCGF1-KO w/ antibodies for H3K4me3, H3K27me3 & H2AK119.
 
 CUTandTAG_220328: K562s w/ NT2, AEBP2-KO, MTF2-KO, CAS_EZH2i, MLL1-2-KO_EZH2i, CAS_EZH2i_IFN, & MLL1-2-KO_EZH2i_IFN; w/antibodies for H2AK119, H3K27me3 & H3K4me3.
+
+ReChIP_220511: Chip-rechip experiment to find bivalent genes with single and rechip samples for H3K4me3 & H3K27me3.
