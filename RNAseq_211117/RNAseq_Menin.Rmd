@@ -1,0 +1,868 @@
+---
+title: "RNAseq_Menin_211117"
+output: html_document
+---
+
+Location of sequencing runs: /pipeline/Runs/NextSeq/211117_NB501056_0719_AHWC7NBGXK/ProjectFolders/Project_Christina-Sparbier/Sample_MHC-Exp*
+
+# set and create dirs
+```{r}
+project.dir <- "/dawson_genomics/Projects/Menin/RNAseq_211117_NB501056_0719_AHWC7NBGXK"
+align.dir <- file.path(project.dir, "alignment")
+results.dir <- file.path(project.dir, "results")
+logs.dir <- file.path(project.dir, "logs")
+plots.dir <- file.path(project.dir, "plots")
+sample.dir <- file.path(project.dir, "sample_info")
+scripts.dir <- file.path(project.dir, "scripts")
+session.dir <- file.path(project.dir, "session_info")
+
+dir.create(align.dir)
+dir.create(logs.dir)
+dir.create(plots.dir)
+dir.create(results.dir)
+dir.create(sample.dir)
+dir.create(scripts.dir)
+dir.create(session.dir)
+
+setwd(project.dir)
+```
+
+# submit trim/align/count/fastqc
+```{bash}
+#run from align dir
+cd alignment
+
+for fq in /pipeline/Runs/NextSeq/211117_NB501056_0719_AHWC7NBGXK/ProjectFolders/Project_Christina-Sparbier/Sample_MHC-Exp*/*fastq.gz
+do
+sbatch ../scripts/hisat2_hg19dm6.sbatch $fq
+done
+
+#do multiqc of fastqcs
+module load multiqc/1.8
+multiqc fastqc
+```
+
+# load into edger
+```{r}
+library(edgeR)
+library(readxl)
+
+# get sample sheet
+sample.sheet <- read_excel(file.path(sample.dir, "MGC-CS-3877_211104_DAWSONLAB.xlsx"), sheet = "RNA-seq", n_max = 28)
+# set counts files names
+count.dir <- file.path(align.dir, "count")
+file.names <- paste0(gsub("\\.|\\+", "-", sample.sheet$Sample_name), "_S", seq(1:28), ".count")
+# remove all "+" symbols to avoid syntactical issues
+treatment <- gsub("EPZ\\+VTP", "Combo", sample.sheet$Treatment)
+
+# make sample annotation
+sample.ann = data.frame(
+  "files" = file.names, 
+  "samples" = paste0(sample.sheet$`Cell type/line`, "_", treatment, "_", sample.sheet$Replicate, "_S", seq(1:28)),  
+  "treatment" = treatment,
+  "cells" = sample.sheet$`Cell type/line`,
+  "group" = paste(sample.sheet$`Cell type/line`, treatment, sep = "_"),
+  "replicate" = sample.sheet$Replicate
+  )
+
+#write out sample annotation file 
+write.table(
+  sample.ann,
+  file.path(sample.dir, "sample_annotation.txt"),
+  sep = "\t",
+  quote = FALSE,
+  col.names = T
+  )
+
+# sequencing and sample information
+dge.counts = readDGE(
+  file = sample.ann$files, 
+  path = count.dir,
+  group = sample.ann$group
+  )
+
+#change colnames to sample names
+colnames(dge.counts$counts) <- sample.ann$samples
+```
+
+# write out raw counts
+```{r}
+write.table(
+  dge.counts$counts, 
+  file.path(results.dir, "raw_counts_all.txt"),
+  sep = "\t",
+  quote = F
+  )
+```
+
+# separate organisms counts objects
+```{r}
+dros <- which(substr(rownames(dge.counts), 1, 4) == "FBgn")
+
+dm.counts <- dge.counts[dros, ]
+hg.counts <- dge.counts[-dros, ]
+
+counts.all <- list(hg.counts, dm.counts)
+```
+
+
+# Filtering out genes with low counts
+```{r}
+# init variable for new lists
+counts.cpms.list <- list()
+counts.filtered <- list()
+
+# loop through both counts objects to apply same filtering to both
+for(counts.i in 1:length(counts.all)){
+  colSums(counts.all[[counts.i]]$counts)
+  noint = rownames(counts.all[[counts.i]]) %in% c("__no_feature", "__ambiguous", "__too_low_aQual","__not_aligned","__alignment_not_unique")
+  table(noint)
+  counts.cpms.list[[counts.i]] = cpm(counts.all[[counts.i]])
+  keep = rowSums(counts.cpms.list[[counts.i]] > 1 ) >= 3 & !noint
+  counts.filtered[[counts.i]] = counts.all[[counts.i]][keep,]
+}
+
+# set names for lists
+names(counts.all) <- c("hg_counts", "dm_counts")
+names(counts.filtered) <- c("hg_counts", "dm_counts")
+names(counts.cpms.list) <- c("hg_counts", "dm_counts")
+
+# make list of hg counts filtered and unfiltered
+hg.counts.list <- list("filtered" = counts.filtered$hg_counts, "unfiltered" = counts.all$hg_counts)
+```
+
+# write out both Hg counts
+```{r}
+write.table(
+  hg.counts.list$filtered$counts,
+  file.path(results.dir, "filtered/filtered_counts_Hg.txt"),
+  sep ="\t",
+  quote = FALSE
+)
+write.table(
+  hg.counts.list$unfiltered$counts,
+  file.path(results.dir, "unfiltered/unfiltered_counts_Hg.txt"),
+  sep ="\t",
+  quote = FALSE
+)
+```
+
+# Plot count numbers for both
+```{r}
+dir.create(file.path(plots.dir, "filtered"))
+dir.create(file.path(plots.dir, "unfiltered"))
+
+pdf(file = file.path(plots.dir, "filtered/hg_counts_barplot.pdf"), width = 6, height = 5)
+barplot(
+  colSums(hg.counts.list$filtered$counts), 
+  las=2, 
+  main="Hg19 filtered counts", 
+  names.arg = sample.ann$samples
+  )
+dev.off()
+
+pdf(file = file.path(plots.dir, "unfiltered/hg_counts_barplot.pdf"), width = 6, height = 5)
+barplot(
+  colSums(hg.counts.list$unfiltered$counts), 
+  las=2, 
+  main="Hg19 unfiltered counts", 
+  names.arg = sample.ann$samples
+  )
+dev.off()
+```
+
+## add ann info
+```{r}
+for(hg.i in 1:length(hg.counts.list)){
+  hg.counts.list[[hg.i]]$samples$treatment <- sample.ann$treatment
+  hg.counts.list[[hg.i]]$samples$cells <- sample.ann$cells
+  hg.counts.list[[hg.i]]$samples$replicate <- sample.ann$replicate
+}
+```
+
+# MDS plot unnorm counts
+```{r}
+library(RColorBrewer)
+# Setting colours
+col.group <- as.factor(hg.counts.list$filtered$samples$group)
+levels(col.group) <- brewer.pal(nlevels(col.group), "Set1") 
+col.group <- as.character(col.group)
+
+filter.names <- c("filtered", "unfiltered")
+
+for(hg.i in 1:length(hg.counts.list)){
+  pdf(file.path(plots.dir, filter.names[[hg.i]], "MDS_unnorm_counts.pdf"))
+  MDS = plotMDS(
+    hg.counts.list[[hg.i]],
+    labels = paste0(hg.counts.list[[hg.i]]$samples$group, "_", hg.counts.list[[hg.i]]$samples$replicate), 
+    col = col.group
+    )
+  dev.off()
+}
+```
+
+# calc norm based on Dm
+```{r}
+d.counts = calcNormFactors(counts.all$dm_counts, method="TMM")
+hg.counts.list$filtered$samples$norm.factors <- d.counts$samples$norm.factors
+hg.counts.list$unfiltered$samples$norm.factors <- d.counts$samples$norm.factors
+```
+
+# MDS on norm counts
+```{r}
+for(hg.i in 1:length(hg.counts.list)){
+  pdf(file.path(plots.dir, filter.names[[hg.i]], "MDS_norm_counts.pdf"))
+  MDS = plotMDS(
+    hg.counts.list[[hg.i]],
+    labels = paste0(hg.counts.list[[hg.i]]$samples$group, "_", hg.counts.list[[hg.i]]$samples$replicate), 
+    col = col.group
+    )
+  dev.off()
+}
+```
+
+# set design and contrasts for DE
+```{r}
+# design table
+design = model.matrix(~0+group, data = hg.counts.list$filtered$samples)
+colnames(design) <- gsub("group", "", colnames(design))
+design
+
+contr.matrix <- makeContrasts(
+  EPZvsDMSO_H9 = H9_EPZ-H9_DMSO,
+  VTPvsDMSO_H9 = H9_VTP-H9_DMSO,
+  CombovsDMSO_H9 = H9_Combo-H9_DMSO,
+  CombovsEPZ_H9 = H9_Combo-H9_EPZ,
+  CombovsVTP_H9 = H9_Combo-H9_VTP,
+  EPZvsDMSO_iPS = iPS_EPZ-iPS_DMSO,
+  VTPvsDMSO_iPS = iPS_VTP-iPS_DMSO,
+  CombovsDMSO_iPS = iPS_Combo-iPS_DMSO,
+  CombovsEPZ_iPS = iPS_Combo-iPS_EPZ,
+  CombovsVTP_iPS = iPS_Combo-iPS_VTP,
+  levels = colnames(design)
+  )
+contr.matrix
+```
+
+EdgeR estimate dispersions 
+```{r}
+for(hg.i in 1:length(hg.counts.list)){
+  hg.counts.list[[hg.i]] = estimateDisp(hg.counts.list[[hg.i]], design)
+}
+```
+
+# make gene ann table from BM
+```{r}
+library(biomaRt)
+Hsensembl=useMart(
+  host='asia.ensembl.org', 
+  biomart='ENSEMBL_MART_ENSEMBL',
+  dataset='hsapiens_gene_ensembl'
+  )
+
+hg.ann = getBM(
+  attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene_id"), 
+  mart = Hsensembl,
+  uniqueRows = TRUE
+  )
+```
+
+# use edgeR for DE
+```{r}
+ftest.list <- list()
+sig.ftest.list<- list()
+
+for(hg.i in 1:length(hg.counts.list)){
+    
+  gfit_hg <- glmQLFit(hg.counts.list[[hg.i]], design)
+  edger.dir <- file.path(results.dir, filter.names[hg.i], "edger")
+  dir.create(edger.dir, recursive = TRUE)
+  ftest.list[[hg.i]] <- list()
+  
+  for(contrast.i in 1:length(colnames(contr.matrix))){
+  
+    ftest.list[[hg.i]][[contrast.i]] <- glmQLFTest(gfit_hg, contrast = contr.matrix[ , contrast.i])
+    ftest.list[[hg.i]][[contrast.i]]$table$ensg <- rownames(ftest.list[[hg.i]][[contrast.i]]$table)
+    ftest.list[[hg.i]][[contrast.i]]$table <- merge(ftest.list[[hg.i]][[contrast.i]]$table, hg.ann, by.x = "ensg", by.y = "ensembl_gene_id")
+    # write ftest table
+    write.table(
+      ftest.list[[hg.i]][[contrast.i]]$table,
+      file.path(edger.dir, paste0(colnames(contr.matrix)[contrast.i], "_ftest_table.txt")),
+      sep = "\t",
+      quote = F,
+      col.names = T,
+      row.names= F
+    )
+  }
+  
+  # add contrast names to ftest list
+  names(ftest.list[[hg.i]]) <- colnames(contr.matrix)
+
+  # make list of significant ftest tables
+  sig.ftest.list[[hg.i]] <- list()
+  for(contrast.i in 1:length(colnames(contr.matrix))){
+   sig.ftest.list[[hg.i]][[contrast.i]] <- subset(ftest.list[[hg.i]][[contrast.i]]$table, PValue < 0.05)
+  }
+  names(sig.ftest.list[[hg.i]]) <- colnames(contr.matrix)
+}
+
+names(ftest.list) <- filter.names
+names(sig.ftest.list) <- filter.names
+```
+
+# MA plots for each contrast
+```{r}
+dir.create(file.path(plots.dir, "filtered/MA"))
+dir.create(file.path(plots.dir, "unfiltered/MA"))
+for(hg.i in 1:length(ftest.list)){
+  for(contrast.i in 1:length(ftest.list[[hg.i]])){
+    pdf(file.path(plots.dir, filter.names[hg.i], "MA", paste0(colnames(contr.matrix)[contrast.i], "_MAplot.pdf")))
+    maPlot(
+      logAbundance = ftest.list[[hg.i]][[contrast.i]]$table$logCPM,
+      logFC = ftest.list[[hg.i]][[contrast.i]]$table$logFC,
+      main = colnames(contr.matrix)[contrast.i],
+      xlab = expression(bold(paste("log"[2], " CPM"))),
+      ylab = expression(bold(paste("log"[2], " FC"))),
+      col = "black",
+      allCol ="red",
+      lowess = T
+    )
+    dev.off()
+  }
+}
+```
+
+# boxplot of menin vs not and bivalent vs not for H9 (iPS not annotated for bivalent)
+```{r}
+library(data.table)
+# set previous chip scripts dir for reference files
+ref.dir <- "/dawson_genomics/Projects/Menin/ChIPseq_200320_NB501056_0470_AH5NJJBGXF/scripts"
+# make dir for boxplots
+dir.create(file.path(plots.dir, "filtered/boxplots"))
+dir.create(file.path(plots.dir, "unfiltered/boxplots"))
+
+# read in menin genes and ES bivalent genes
+menin <- fread(file.path(ref.dir, "MeninGenes.bed"))
+bivalent <- scan(file.path(ref.dir, "ESbivalent.txt"), what = "character")
+
+for(hg.i in 1:length(sig.ftest.list)){
+  for(cont.i in 1:3){
+    men.data <- sig.ftest.list[[hg.i]][[cont.i]][sig.ftest.list[[hg.i]][[cont.i]]$ensg %in% menin$V4,]
+    not.men.data <- sig.ftest.list[[hg.i]][[cont.i]][!(sig.ftest.list[[hg.i]][[cont.i]]$ensg %in% menin$V4),]
+    men.bi.data <- men.data[men.data$hgnc_symbol %in% bivalent,]
+    men.not.bi.data <- men.data[!(men.data$hgnc_symbol %in% bivalent),]
+    not.men.bi.data <- not.men.data[not.men.data$hgnc_symbol %in% bivalent,]
+    not.men.not.bi.data <- not.men.data[!(not.men.data$hgnc_symbol %in% bivalent),]
+    pdf(file.path(plots.dir, filter.names[hg.i], "boxplots", paste0(colnames(contr.matrix)[cont.i], "_menin_bivalent_boxplot.pdf")))
+    boxplot(
+      not.men.not.bi.data$logFC, not.men.bi.data$logFC, men.not.bi.data$logFC, men.bi.data$logFC,
+      names = c("non-Menin\n not bivalent", "non-Menin\n bivalent", "Menin\n not bivalent", "Menin\n bivalent"),
+      main = paste0("H9 ", gsub("_H9", "", colnames(contr.matrix)[[cont.i]]), " DE genes"),
+      ylab = expression(bold(paste("log"[2], " FC"))),
+      col = c("gray30", "deeppink3", "gray90", "deepskyblue2"),
+      at = c(1, 2, 4, 5),
+      boxwex = 0.5
+    )
+    dev.off()
+  }
+}
+```
+
+# find genes commonly up or down regulated in all DE comparisons per cell line
+```{r}
+library(eulerr)
+library(gridExtra)
+
+for(hg.i in 1:length(sig.ftest.list)){
+  # get significant DE genes for each single treatment/cell line
+  h9.epz <- sig.ftest.list[[hg.i]]$EPZvsDMSO_H9
+  h9.vtp <- sig.ftest.list[[hg.i]]$VTPvsDMSO_H9
+  h9.combo <- sig.ftest.list[[hg.i]]$CombovsDMSO_H9
+  ips.epz <- sig.ftest.list[[hg.i]]$EPZvsDMSO_iPS
+  ips.vtp <- sig.ftest.list[[hg.i]]$VTPvsDMSO_iPS
+  ips.combo <- sig.ftest.list[[hg.i]]$CombovsDMSO_iPS
+  
+  # create merged tables for each possible intersection per cell line 
+  h9.epz.vtp <- merge(h9.epz, h9.vtp, by.x = c("ensg", "hgnc_symbol", "entrezgene_id"), by.y = c("ensg", "hgnc_symbol", "entrezgene_id"))
+  h9.epz.combo <- merge(h9.epz, h9.combo, by.x = c("ensg", "hgnc_symbol", "entrezgene_id"), by.y = c("ensg", "hgnc_symbol", "entrezgene_id"))
+  h9.vtp.combo <- merge(h9.vtp, h9.combo, by.x = c("ensg", "hgnc_symbol", "entrezgene_id"), by.y = c("ensg", "hgnc_symbol", "entrezgene_id"))
+  ips.epz.vtp <- merge(ips.epz, ips.vtp, by.x = c("ensg", "hgnc_symbol", "entrezgene_id"), by.y = c("ensg", "hgnc_symbol", "entrezgene_id"))
+  ips.epz.combo <- merge(ips.epz, ips.combo, by.x = c("ensg", "hgnc_symbol", "entrezgene_id"), by.y = c("ensg", "hgnc_symbol", "entrezgene_id"))
+  ips.vtp.combo <- merge(ips.vtp, ips.combo, by.x = c("ensg", "hgnc_symbol", "entrezgene_id"), by.y = c("ensg", "hgnc_symbol", "entrezgene_id"))
+  
+    # rename columns for clarity
+  colnames(h9.epz.vtp)[4:11] <- c("EPZ_logFC", "EPZ_logCPM", "EPZ_F", "EPZ_PValue", "VTP_logFC", "VTP_logCPM", "VTP_F", "VTP_PValue")
+  colnames(h9.epz.combo)[4:11] <- c("EPZ_logFC", "EPZ_logCPM", "EPZ_F", "EPZ_PValue", "Combo_logFC", "Combo_logCPM", "Combo_F", "Combo_PValue")
+  colnames(h9.vtp.combo)[4:11] <- c("VTP_logFC", "VTP_logCPM", "VTP_F", "VTP_PValue", "Combo_logFC", "Combo_logCPM", "Combo_F", "Combo_PValue")
+  colnames(ips.epz.vtp)[4:11] <- c("EPZ_logFC", "EPZ_logCPM", "EPZ_F", "EPZ_PValue", "VTP_logFC", "VTP_logCPM", "VTP_F", "VTP_PValue")
+  colnames(ips.epz.combo)[4:11] <- c("EPZ_logFC", "EPZ_logCPM", "EPZ_F", "EPZ_PValue", "Combo_logFC", "Combo_logCPM", "Combo_F", "Combo_PValue")
+  colnames(ips.vtp.combo)[4:11] <- c("VTP_logFC", "VTP_logCPM", "VTP_F", "VTP_PValue", "Combo_logFC", "Combo_logCPM", "Combo_F", "Combo_PValue")
+  
+  # make list of merged tables
+  merge.list <- list(
+    "H9_EPZ_VTP" = h9.epz.vtp,
+    "H9_EPZ_Combo" = h9.epz.combo,
+    "H9_VTP_Combo" = h9.vtp.combo,
+    "iPS_EPZ_VTP" = ips.epz.vtp,
+    "iPS_EPZ_Combo" = ips.epz.combo,
+    "iPS_VTP_Combo" = ips.vtp.combo
+  )
+  # write tables in common genes dir
+  common.dir <- file.path(results.dir, filter.names[[hg.i]], "edger/common_genes")
+  dir.create(common.dir)
+  
+  for(merge.i in 1:length(merge.list)){
+    # keep only genes with matching directionality of FC
+    keep <- which(((merge.list[[merge.i]][4] > 0) + (merge.list[[merge.i]][8] > 0)) != 1)
+    merge.list[[merge.i]] <- merge.list[[merge.i]][keep, ]
+    
+    write.table(
+      merge.list[[merge.i]],
+      file.path(common.dir, paste0(names(merge.list)[merge.i], "_common_genes_table.txt")),
+      sep = "\t",
+      quote = F,
+      col.names = T,
+      row.names = F
+    )
+    
+    # subset common genes to menin genes
+    merge.list.menin <- subset(merge.list[[merge.i]], ensg %in% menin$V4)
+    
+    # save common menin table
+    write.table(
+      merge.list.menin,
+      file.path(common.dir, paste0(names(merge.list)[merge.i], "_common_menin_genes_table.txt")),
+      sep = "\t",
+      quote = FALSE,
+      col.names = TRUE,
+      row.names = FALSE
+    )
+  }
+  
+  # make Eulers of up and down-reg for each cell line
+  # separate into up-/down-regulated
+  h9.up.genes <- list(
+    VTP = unique(h9.vtp$ensg[h9.vtp$logFC > 0]),
+    EPZ = unique(h9.epz$ensg[h9.epz$logFC > 0])
+  )
+  
+  h9.down.genes <- list(
+    VTP = unique(h9.vtp$ensg[h9.vtp$logFC < 0]),
+    EPZ = unique(h9.epz$ensg[h9.epz$logFC < 0])
+  )
+  
+  ips.up.genes <- list(
+    VTP = unique(ips.vtp$ensg[ips.vtp$logFC > 0]),
+    EPZ = unique(ips.epz$ensg[ips.epz$logFC > 0])
+  )
+  
+  ips.down.genes <- list(
+    VTP = unique(ips.vtp$ensg[ips.vtp$logFC < 0]),
+    EPZ = unique(ips.epz$ensg[ips.epz$logFC < 0])
+  )
+  
+  pdf(file.path(plots.dir,filter.names[[hg.i]], "Euler_EPZ_VTP_genes_overlap.pdf"))
+  grid.arrange(
+    plot(euler(h9.up.genes), quantities = T, fills = c("indianred3", "indianred1"), main = "H9 up-regulated genes"),
+    plot(euler(h9.down.genes), quantities = T, fills = c("lightskyblue3", "lightskyblue1"), main = "H9 down-regulated genes"),
+    plot(euler(ips.up.genes), quantities = T, fills = c("lightsalmon3", "lightsalmon1"), main = "iPS up-regulated genes"),
+    plot(euler(ips.down.genes), quantities = T, fills = c("paleturquoise3", "paleturquoise1"), main = "iPS down-regulated genes")
+  )
+  dev.off()
+}
+```
+
+## make boxplot of common genes in H9 EPZ and VTP treatments
+#```{r}
+#men.data <- h9.common[h9.common$ensg %in% menin$V4,]
+#not.men.data <- h9.common[!(h9.common$ensg %in% menin$V4),]
+#men.bi.data <- men.data[men.data$hgnc_symbol %in% bivalent,]
+#men.not.bi.data <- men.data[!(men.data$hgnc_symbol %in% bivalent),]
+#not.men.bi.data <- not.men.data[not.men.data$hgnc_symbol %in% bivalent,]
+#not.men.not.bi.data <- not.men.data[!(not.men.data$hgnc_symbol %in% bivalent),]
+#pdf(file.path(plots.dir, "boxplots/H9_EPZ_VTP_common_DE_menin_bivalent_boxplot.pdf"))
+#par(list(mar=c(4, 4, 4, 12), xpd = TRUE))
+#boxplot(
+#  not.men.not.bi.data$EPZ_logFC, not.men.not.bi.data$VTP_logFC, not.men.bi.data$EPZ_logFC, not.men.bi.data$VTP_logFC, men.not.bi.data$EPZ_logFC, men.not.bi.data$VTP_logFC, men.bi.data$EPZ_logFC, men.bi.data$VTP_logFC,
+#  names = c(rep(c("EPZ", "VTP"), 4)),
+#  main = paste0("H9 genes commonly DE with both treatments"),
+#  ylab = expression(bold(paste("log"[2], " FC"))),
+#  col = c("gray30", "gray30", "deeppink3", "deeppink3", "gray90", "gray90", "deepskyblue2", "deepskyblue2"),
+#  at = c(1, 2, 4, 5, 7, 8, 10, 11),
+#  las = 2
+#)
+#legend(
+#  "topright", inset=c(-0.62,0), 
+#  legend=c("Non-Menin, not bivalent","Menin, not bivalent", "Non-Menin, bivalent","Menin, bivalent"), 
+#  fill = c("gray30", "deeppink3", "gray90", "deepskyblue2")
+#  )
+#dev.off()
+#```
+
+# make heatmaps of LFC for each contrast: 1 ordered by LFC, 1 clustered
+# only used filtered counts here as unfiltered would be too noisy
+```{r}
+library(viridisLite)
+library(gplots)
+#get normalised logCPMs
+cpm.filt.log <- cpm(hg.counts.list$filtered, normalized.lib.sizes = TRUE, log = TRUE)
+# set var for xpm expression data for heatmaps
+hg.cpm.filt <- as.matrix(cpm.filt.log)
+
+heatmap.dir <- file.path(plots.dir, "filtered/heatmaps")
+dir.create(heatmap.dir)
+
+for(con.i in 1:length(colnames(contr.matrix))){
+  # get samples for contrast, then limit heatmap to contrast samples and sig only for contrast
+  contr.levels <- which(t(contr.matrix)[con.i,] != 0)
+  contr.samples <- sample.ann$samples[sample.ann$group %in% names(contr.levels)]
+  heat.data <- hg.cpm.filt[sig.ftest.list$filtered[[con.i]]$ensg, contr.samples]
+  # use symbol for rownames, but if unavailable use ensg
+  rownames(heat.data) <- sig.ftest.list$filtered[[con.i]]$hgnc_symbol
+  no.symbol <- which(sig.ftest.list$filtered[[con.i]]$hgnc_symbol == "")
+  rownames(heat.data)[no.symbol] <- sig.ftest.list$filtered[[con.i]]$ensg[no.symbol]
+  # remove any duplicates
+  heat.unique <- unique(heat.data)
+  print(dim(heat.data))
+  # heatmap with clustering dendograms
+  pdf(file.path(heatmap.dir, paste0(colnames(contr.matrix)[con.i], "_LCPM_clustered_heatmap.pdf")))
+  heatmap.2(
+    heat.unique,
+    cexCol = 0.95,
+    cexRow = 0.1,
+    margins = c(8, 4),
+    main = paste0("logCPM ", colnames(contr.matrix)[con.i]),
+    ylab = paste0("Genes (n=", nrow(heat.unique), ")"),
+    col = viridis(200, option = "B"),
+    key = TRUE,
+    breaks = c(seq(min(heat.unique), max(heat.unique), length.out = 201)),
+    trace = "none"
+  )
+  dev.off()
+  # heatmap oredered ny LFC in comparison
+  heat.data <- heat.data[order(sig.ftest.list$filtered[[con.i]]$logFC, decreasing = TRUE),]
+  heat.data <- unique(heat.data)
+  pdf(file.path(heatmap.dir, paste0(colnames(contr.matrix)[con.i], "_LFC_ordered_heatmap.pdf")))
+  heatmap.2(
+    heat.data,
+    Rowv = NA,
+    cexCol = 0.95,
+    cexRow = 0.1,
+    margins = c(8, 4),
+    main = paste0("logCPM ", colnames(contr.matrix)[con.i]),
+    ylab = paste0("Genes (n=", nrow(heat.data), ")"),
+    col = viridis(200, option = "B"),
+    key = TRUE,
+    breaks = c(seq(min(heat.unique), max(heat.unique), length.out = 201)),
+    trace = "none"
+  )
+  dev.off()
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+# save session info
+```{r}
+sesh.info <- capture.output(sessionInfo())
+writeLines(
+  sesh.info,
+  file.path(session.dir, paste0(Sys.Date(), "RNAseq_2111.txt"))
+)
+```
+
+
+### Additional analysis 19/6/22 Enid
+Heatmap of bivalent genes for H9
+```{r}
+counts <- read.delim("results/raw_counts_all.txt")
+samples <- read.delim("sample_info/sample_annotation.txt")
+all(samples$samples == colnames(counts))
+```
+only H9 data
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts[,17:28],colData = samples [17:28,c(2:6)], design = ~ group)
+dds
+colnames(dds) <- colnames(counts[,17:28])
+dds <- estimateSizeFactors(dds)
+```
+```{r}
+noint = rownames(counts) %in% c("__no_feature", "__ambiguous", "__too_low_aQual","__not_aligned","__alignment_not_unique")
+table(noint)
+keep <- rowSums(counts(dds)) >= 10  & !noint
+
+dds <- dds[keep,]
+vsd <- vst(dds, blind=FALSE)
+```
+
+read in list of bivalent genes
+```{r}
+bivalent <- read.delim("/dawson_genomics/Projects/Menin/ChIPseq_200320_NB501056_0470_AH5NJJBGXF/scripts/ESbivalent.txt", header=F)
+
+genes=getBM(attributes=c("ensembl_gene_id","hgnc_symbol"),filters = "hgnc_symbol",values=bivalent$V1,mart=ensembl)
+dim(genes)
+genes <- genes[!duplicated(genes$ensembl_gene_id),]
+dim(genes)
+```
+```{r}
+df <- as.data.frame(colData(vsd)[,"treatment"])
+rownames(df) <- colnames(vsd)
+
+BivalentEnsGenes <- genes[genes$ensembl_gene_id %in% rownames(vsd),]
+
+#correct batch effect
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$replicate)
+
+pdf("plots/Heatmap_H9_Bivalent.pdf")
+pheatmap(assay(vsd)[BivalentEnsGenes$ensembl_gene_id,], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100),show_rownames=FALSE,main="Bivalent genes", annotation_col=df, scale = "row")
+dev.off()
+```
+#order by LFC
+```{r}
+ComboVsDMSO <- read.delim("results/filtered/edger/CombovsDMSO_H9_ftest_table.txt")
+ComboVsDMSO$logFC[is.na(ComboVsDMSO$logFC)] <- 0
+
+BivalentEnsGenes <- inner_join(BivalentEnsGenes, ComboVsDMSO[,c(1:2,5)], by=c("ensembl_gene_id"= "ensg"))
+
+BivalentEnsGenesOrder <- BivalentEnsGenes[order(BivalentEnsGenes$logFC),]
+write.table(BivalentEnsGenesOrder, file="results/BivalentGenes_LFC.txt", row.names = F, quote=F, sep="\t")
+
+pdf("plots/Heatmap_H9_Bivalent_NotClustered.pdf")
+pheatmap(assay(vsd)[BivalentEnsGenesOrder$ensembl_gene_id,], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100),show_rownames=FALSE,main="Bivalent genes", annotation_col=df, scale = "row", cluster_rows =FALSE)
+dev.off()
+
+pdf("plots/Heatmap_H9_Bivalent_Clustered.pdf")
+pheatmap(assay(vsd)[BivalentEnsGenes$ensembl_gene_id,], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100),show_rownames=FALSE,main="Bivalent genes", annotation_col=df, scale = "row")
+dev.off()
+
+pdf("plots/Heatmap_H9_Bivalent_NotScaled.pdf")
+pheatmap(assay(vsd)[BivalentEnsGenesOrder$ensembl_gene_id,], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100),show_rownames=FALSE,main="Bivalent genes", annotation_col=df, cluster_rows =FALSE)
+dev.off()
+
+
+```
+Plot LFC
+```{r}
+BivalentEnsGenesOrder <- BivalentEnsGenesOrder[!duplicated(BivalentEnsGenesOrder$ensembl_gene_id),]
+
+ComboVsDMSO <- read.delim("results/filtered/edger/CombovsDMSO_H9_ftest_table.txt")
+ComboVsDMSO$logFC[is.na(ComboVsDMSO$logFC)] <- 0
+ComboVsDMSO <- ComboVsDMSO[!duplicated(ComboVsDMSO$ensg),]
+VTPVsDMSO <- read.delim("results/filtered/edger/VTPvsDMSO_H9_ftest_table.txt")
+VTPVsDMSO$logFC[is.na(VTPVsDMSO$logFC)] <- 0
+VTPVsDMSO <- VTPVsDMSO[!duplicated(VTPVsDMSO$ensg),]
+EPZVsDMSO <- read.delim("results/filtered/edger/EPZvsDMSO_H9_ftest_table.txt")
+EPZVsDMSO$logFC[is.na(EPZVsDMSO$logFC)] <- 0
+EPZVsDMSO <- EPZVsDMSO[!duplicated(EPZVsDMSO$ensg),]
+
+BivalentEnsGenesOrder <- inner_join(BivalentEnsGenesOrder, EPZVsDMSO[,c(1:2,5)], by=c("ensembl_gene_id"="ensg"))
+BivalentEnsGenesOrder <- inner_join(BivalentEnsGenesOrder, VTPVsDMSO[,c(1:2,5)], by=c("ensembl_gene_id"="ensg"))
+
+colnames(BivalentEnsGenesOrder)[3:8] <- c("Combo_LFC", "Combo_p", "EPZ_LFC","EPZ_p", "VTP_LFC", "VTP_p")
+
+rownames(BivalentEnsGenesOrder) <- BivalentEnsGenesOrder[,1]
+write.table(BivalentEnsGenesOrder, file="results/BivalentGenes_LFC.txt", row.names = F, quote=F, sep="\t")
+
+```
+
+```{r}
+df <- data.frame(c("Combo", "EPZ", "VTP"))
+rownames(df) <- colnames(BivalentEnsGenesOrder[,4:6])
+
+pdf("plots/Heatmap_H9_Bivalent_LFC.pdf")
+pheatmap(BivalentEnsGenesOrder[,4:6], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100),show_rownames=FALSE,main="Bivalent genes", annotation_col=df, cluster_rows =FALSE)
+dev.off()
+
+
+```
+Sig Up and Down genes separately
+```{r}
+ComboBivalent <- ComboVsDMSO[ComboVsDMSO$ensg %in% genes$ensembl_gene_id,]
+ComboBivalent <- ComboBivalent[order(ComboBivalent$logFC),]
+
+ComboEZPBivalent <- inner_join(ComboBivalent[,c(1,2,5,6)], EPZVsDMSO[,c(1,2)], by="ensg")
+ComboEZPVTPBivalent <- inner_join(ComboEZPBivalent, VTPVsDMSO[,c(1,2)], by="ensg")
+
+colnames(ComboEZPVTPBivalent)[c(2,3,5,6)] <- c("Combo_LFC","Combo_Pval", "EPZ_LFC","VTP_LFC")
+rownames(df) <- colnames(ComboEZPVTPBivalent)[c(2,5,6)]
+
+
+pdf("plots/Heatmap_H9_Bivalent_LFC_sig.pdf")
+pheatmap(ComboEZPVTPBivalent[ComboEZPVTPBivalent$Combo_Pval < 0.05,c(6,5,2)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-12, 12, length.out = 100),show_rownames=FALSE,main=paste0("Bivalent genes LFC p<0.05 n=", nrow(ComboEZPVTPBivalent[ComboEZPVTPBivalent$Combo_Pval < 0.05,c(2,5,6)])), annotation_col=df, cluster_rows =FALSE, cluster_cols = FALSE)
+pheatmap(ComboEZPVTPBivalent[ComboEZPVTPBivalent$Combo_Pval < 0.05 & ComboEZPVTPBivalent$Combo_LFC > 1,c(6,5,2)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-12, 12, length.out = 100),show_rownames=FALSE,main=paste0("Bivalent genes LFC > 1, p<0.05 n=",nrow(ComboEZPVTPBivalent[ComboEZPVTPBivalent$Combo_Pval < 0.05 & ComboEZPVTPBivalent$Combo_LFC > 1,c(2,5,6)])), annotation_col=df, cluster_rows =FALSE, cluster_cols = FALSE)
+pheatmap(ComboEZPVTPBivalent[ComboEZPVTPBivalent$Combo_Pval < 0.05 & ComboEZPVTPBivalent$Combo_LFC < (-1),c(6,5,2)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-12, 12, length.out = 100),show_rownames=FALSE,main=paste0("Bivalent genes LFC < -1, p<0.05 n=", nrow(ComboEZPVTPBivalent[ComboEZPVTPBivalent$Combo_Pval < 0.05 & ComboEZPVTPBivalent$Combo_LFC < (-1),c(2,5,6)])), annotation_col=df, cluster_rows =FALSE, cluster_cols = FALSE)
+dev.off()
+```
+
+Heatmap of germ layer specific genes
+```{r}
+germlayers <- read.delim("~/germlayers.txt")
+ensembl = useMart(biomart="ENSEMBL_MART_ENSEMBL", host="asia.ensembl.org",dataset="hsapiens_gene_ensembl")
+
+lineagegenes=getBM(attributes=c("ensembl_gene_id","hgnc_symbol","entrezgene_id"),filters = "hgnc_symbol",values=germlayers$Gene,mart=ensembl)
+
+LineageRNAseq <- inner_join(lineagegenes, ComboVsDMSO[,c(1,2,5)], by=c("ensembl_gene_id"="ensg"))
+LineageRNAseq <- inner_join(LineageRNAseq, EPZVsDMSO[,c(1,2,5)], by=c("ensembl_gene_id"="ensg"))
+LineageRNAseq <- inner_join(LineageRNAseq, VTPVsDMSO[,c(1,2,5)], by=c("ensembl_gene_id"="ensg"))
+LineageRNAseq <- inner_join(LineageRNAseq, germlayers, by=c("hgnc_symbol"="Gene"))
+
+colnames(LineageRNAseq)[c(4,6,8)] <- c("Combo", "EPZ", "VTP")
+
+rownames(LineageRNAseq) <- LineageRNAseq$hgnc_symbol
+lineagedf <- LineageRNAseq[,10,drop=F]
+
+
+order <- c("SOX17",  "GATA6", "GATA4","FOXA2","TBXT","HAND1", "TBX15","FOXC1", "SNAI1", "PAX6", "GBX2","SOX1", "OLIG2","OTX", "POU5F1",  "NANOG","SOX2")
+
+pdf("plots/Heatmap_LineageGenes.pdf")
+pheatmap(LineageRNAseq[order,c(8,6,4)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-11, 11, length.out = 100),main="Germ layer specific genes LFC", annotation_row=lineagedf, cluster_rows = F, cluster_cols = F)
+
+pheatmap(LineageRNAseq[,c(8,6,4)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-11, 11, length.out = 100),main="Germ layer specific genes LFC", annotation_row=lineagedf, cluster_cols = F)
+dev.off()
+```
+
+#Plot RNAseq data from Cell Reports changes in expression in the EZH2 KO and EZH2 re-complemented cells
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE76626
+
+```{r}
+GSE76626<- read.delim("GSE76626_RNA-Seq_RPM.txt")
+
+Mean_lrpm <- data.frame(OGS=GSE76626$Probe, EnsID=GSE76626$ID, WT_lrpm=rowMeans(GSE76626[,8:10]), Null_lrpm=rowMeans(GSE76626[,14:16]), NullEzh2_lrpm=rowMeans(GSE76626[,17:19]))
+
+Mean_lrpm$Null_LFC <- Mean_lrpm$Null_lrpm-Mean_lrpm$WT_lrpm
+Mean_lrpm$NullEzh2_LFC <- Mean_lrpm$NullEzh2_lrpm-Mean_lrpm$WT_lrpm
+
+genes <- c("SOX17",  "GATA6", "GATA4","FOXA2","T","HAND1", "TBX15","FOXC1", "SNAI1", "PAX6", "GBX2","SOX1", "OLIG2","OTX2", "POU5F1",  "NANOG","SOX2")
+germlayers <- data.frame(germlayer=rep(c("Endoderm", "Mesoderm", "Ectoderm", "Pluripotency"), c(4,5,5,3)))
+
+Mean_lrpm_germlayers <- Mean_lrpm[Mean_lrpm$OGS %in% genes,]
+Mean_lrpm_germlayers <- inner_join(germlayers, Mean_lrpm_germlayers, by=c("Gene"="OGS"))
+
+rownames(germlayers) <- genes
+rownames(Mean_lrpm_germlayers) <- Mean_lrpm_germlayers$OGS
+
+pdf("plots/Heatmap_LineageGenes_GSE76626.pdf")
+pheatmap(Mean_lrpm_germlayers[genes,c(6,7)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-8.5, 8.5, length.out = 100),main="Germ layer specific genes LFC", annotation_row=germlayers, cluster_rows = F, cluster_cols = F)
+dev.off()
+```
+
+
+
+```{r}
+BivalentGenes <- read.delim("results/BivalentGenes_LFC.txt")
+
+Bivalent_ComboSig_LFC4 <- BivalentGenes[BivalentGenes$Combo_p < 0.01 & abs(BivalentGenes$Combo_LFC) > 4,]
+Bivalent_ComboSig_LFC2 <- BivalentGenes[BivalentGenes$Combo_p < 0.01 & abs(BivalentGenes$Combo_LFC) > 2,]
+
+Bivalent_ComboSig_LFC4up <- BivalentGenes[BivalentGenes$Combo_p < 0.01 & BivalentGenes$Combo_LFC > 4,]
+Bivalent_ComboSig_LFC2up <- BivalentGenes[BivalentGenes$Combo_p < 0.01 & BivalentGenes$Combo_LFC > 2,]
+Bivalent_ComboSig_LFC4down <- BivalentGenes[BivalentGenes$Combo_p < 0.01 & BivalentGenes$Combo_LFC < (-4),]
+Bivalent_ComboSig_LFC2down <- BivalentGenes[BivalentGenes$Combo_p < 0.01 & BivalentGenes$Combo_LFC < (-2),]
+
+
+Bivalent_Ezh2_LFC4 <- Mean_lrpm[Mean_lrpm$EnsID %in% Bivalent_ComboSig_LFC4$ensembl_gene_id,]
+Bivalent_Ezh2_LFC2 <- Mean_lrpm[Mean_lrpm$EnsID %in% Bivalent_ComboSig_LFC2$ensembl_gene_id,]
+Bivalent_Ezh2_LFC4up <- Mean_lrpm[Mean_lrpm$EnsID %in% Bivalent_ComboSig_LFC4up$ensembl_gene_id,]
+Bivalent_Ezh2_LFC2up <- Mean_lrpm[Mean_lrpm$EnsID %in% Bivalent_ComboSig_LFC2up$ensembl_gene_id,]
+Bivalent_Ezh2_LFC4down <- Mean_lrpm[Mean_lrpm$EnsID %in% Bivalent_ComboSig_LFC4down$ensembl_gene_id,]
+Bivalent_Ezh2_LFC2down <- Mean_lrpm[Mean_lrpm$EnsID %in% Bivalent_ComboSig_LFC2down$ensembl_gene_id,]
+
+pdf("plots/Heatmap_BivalentSigGenes_GSE76626.pdf")
+pheatmap(Bivalent_Ezh2_LFC4[,c(6,7)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-7, 7, length.out = 100),main="Bivalent genes LFC <-4 >4", cluster_rows = T, cluster_cols = F, show_rownames = F, border_color = NA)
+pheatmap(Bivalent_Ezh2_LFC2[,c(6,7)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-7, 7, length.out = 100),main="Bivalent genes LFC <-2 >2", cluster_rows = T, cluster_cols = F, show_rownames = F, border_color = NA)
+pheatmap(Bivalent_Ezh2_LFC4down[,c(6,7)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-7, 7, length.out = 100),main="Bivalent genes LFC <-4", cluster_rows = T, cluster_cols = F, show_rownames = F, border_color = NA)
+pheatmap(Bivalent_Ezh2_LFC2down[,c(6,7)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-7, 7, length.out = 100),main="Bivalent genes LFC <-2", cluster_rows = T, cluster_cols = F, show_rownames = F, border_color = NA)
+pheatmap(Bivalent_Ezh2_LFC4up[,c(6,7)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-7, 7, length.out = 100),main="Bivalent genes LFC >4", cluster_rows = T, cluster_cols = F, show_rownames = F, border_color = NA)
+pheatmap(Bivalent_Ezh2_LFC2up[,c(6,7)], color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100), breaks = seq(-7, 7, length.out = 100),main="Bivalent genes LFC >2", cluster_rows = T, cluster_cols = F, show_rownames = F,border_color = NA)
+dev.off()
+
+Bivalent_Ezh2_LFC4up_long <- melt(Bivalent_Ezh2_LFC4up[,c(1,6,7)], id.vars="OGS")
+Bivalent_Ezh2_LFC4down_long <- melt(Bivalent_Ezh2_LFC4down[,c(1,6,7)], id.vars="OGS")
+
+pdf("plots/Boxplot_BivalentSigGenes_GSE76626.pdf")
+ggplot(Bivalent_Ezh2_LFC4up_long, aes(x=variable, y=value, fill=variable)) + geom_boxplot() + theme_classic() + ylab("LFC") + ggtitle("Bivalent genes > LFC 4") + coord_cartesian(ylim=c(-5,5))
+ggplot(Bivalent_Ezh2_LFC4down_long, aes(x=variable, y=value, fill=variable)) + geom_boxplot() + theme_classic() + ylab("LFC") + ggtitle("Bivalent genes > LFC 4") + coord_cartesian(ylim=c(-5,5))
+dev.off()
+```
+
+
+GO analysis - Chih 22/02/2022
+
+# EnrichR up regulated genes
+```{r}
+CombovsDMSO_H9 = read.delim("results/filtered/edger/CombovsDMSO_H9_ftest_table.txt",sep="\t")
+CombovsEPZ_H9 = read.delim("results/filtered/edger/CombovsEPZ_H9_ftest_table.txt",sep="\t")
+CombovsVTP_H9 = read.delim("results/filtered/edger/CombovsVTP_H9_ftest_table.txt",sep="\t")
+EPZvsDMSO_H9 = read.delim("results/filtered/edger/EPZvsDMSO_H9_ftest_table.txt",sep="\t")
+VTPvsDMSO_H9 = read.delim("results/filtered/edger/VTPvsDMSO_H9_ftest_table.txt",sep="\t")
+```
+
+```{r}
+plotenrichR = function(input=input, comparison=title, padj = 0.05, LFC = 1){
+require(enrichR)
+
+# gettings up and dn genes  
+input$PValue[is.na(input$PValue)]<-1
+input_DEup = input[input$PValue < padj & input$logFC > LFC,]
+input_DEDn = input[input$PValue < padj & input$logFC < (-1*LFC),]
+
+# running EnrichR
+listEnrichrSites()
+setEnrichrSite("Enrichr") # human
+websiteLive <- TRUE
+dbs <- listEnrichrDbs()
+if (is.null(dbs)) websiteLive <- FALSE
+if (websiteLive) head(dbs)
+dbs
+dbs <- c("GO_Molecular_Function_2021", "GO_Cellular_Component_2021", "GO_Biological_Process_2021")
+#dbs <- c("GO_Biological_Process_2021")
+
+if (websiteLive) {
+    enriched_Up <- enrichr(input_DEup$hgnc_symbol, dbs)
+    enriched_Dn <- enrichr(input_DEDn$hgnc_symbol, dbs)
+}
+
+
+# saving pdf files
+pdf(paste("./plots/EnrichR_GO_Up_", comparison, ".pdf", sep=""), height = 4, width = 10)
+if (websiteLive) enriched_Up[["GO_Molecular_Function_2021"]]
+if (websiteLive) print(plotEnrich(enriched_Up[[1]], showTerms = 15, numChar = 80, y = "Count", orderBy = "P.value", title = "GO_Molecular_Function_2021"))
+# 
+if (websiteLive) enriched_Up[["GO_Cellular_Component_2021"]]
+if (websiteLive) print(plotEnrich(enriched_Up[[2]], showTerms = 15, numChar = 80, y = "Count", orderBy = "P.value", title = "GO_Cellular_Component_2021"))
+
+if (websiteLive) enriched_Up[["GO_Biological_Process_2021"]]
+if (websiteLive) print(plotEnrich(enriched_Up[[3]], showTerms = 15, numChar = 80, y = "Count", orderBy = "P.value", title = "GO_Biological_Process_2021"))
+dev.off()
+
+
+
+pdf(paste("./plots/EnrichR_GO_DN_", comparison, ".pdf", sep=""), height = 4, width = 10)
+if (websiteLive) enriched_Dn[["GO_Molecular_Function_2021"]]
+if (websiteLive) print(plotEnrich(enriched_Dn[[1]], showTerms = 15, numChar = 80, y = "Count", orderBy = "P.value", title = "GO_Molecular_Function_2021"))
+#
+if (websiteLive) enriched_Dn[["GO_Cellular_Component_2021"]]
+if (websiteLive) print(plotEnrich(enriched_Dn[[2]], showTerms = 15, numChar = 80, y = "Count", orderBy = "P.value", title = "GO_Cellular_Component_2021"))
+
+if (websiteLive) enriched_Dn[["GO_Biological_Process_2021"]]
+if (websiteLive) print(plotEnrich(enriched_Dn[[3]], showTerms = 15, numChar = 80, y = "Count", orderBy = "P.value", title = "GO_Biological_Process_2021"))
+dev.off()
+}
+
+```
+
+```{r}
+plotenrichR(CombovsDMSO_H9, comparison = "CombovsDMSO_H9")
+plotenrichR(CombovsEPZ_H9, comparison = "CombovsEPZ_H9")
+plotenrichR(CombovsVTP_H9, comparison = "CombovsVTP_H9")
+plotenrichR(EPZvsDMSO_H9, comparison = "EPZvsDMSO_H9")
+plotenrichR(VTPvsDMSO_H9, comparison = "VTPvsDMSO_H9")
+```
