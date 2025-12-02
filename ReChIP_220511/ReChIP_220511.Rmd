@@ -1,0 +1,45 @@
+---
+title: "ReChIP_220511"
+author: "Andrea"
+date: "12/05/2022"
+output: html_document
+---
+
+fastq dir: /pipeline/Runs/NextSeq/220511_NB501056_0799_AH335YBGXM/ProjectFolders/Project_Christina-Sparbier/
+
+# set up project dir and run alignment pipeline
+```{bash}
+mkdir alignment
+mkdir logs
+mkdir scripts
+
+cd alignment
+
+for fq in /pipeline/Runs/NextSeq/220511_NB501056_0799_AH335YBGXM/ProjectFolders/Project_Christina-Sparbier/*/*fastq.gz
+do
+sbatch ../scripts/Bowtie_align.sbatch $fq
+done
+```
+
+# make BWs and heatmaps at bivalent genes
+```{bash}
+mkdir RPGCNormBW
+mkdir UnnormBW
+
+for bam in *sort.rmdup.bam
+do
+sbatch ../scripts/DeeptoolsBamCov.sbatch $bam
+done
+
+cd RPGCNormBW
+
+sbatch ../../scripts/DeeptoolsBWMatrix.sbatch
+```
+
+# run macs to get bdg output for Spark
+```{bash}
+# input is control for SINGLE samples and K27 is input for both
+sbatch scripts/macs2.sbatch alignment/MHC-ReChIP2-K562-SINGLE-H3K27me3_S3.sort.rmdup.bam alignment/MHC-ReChIP2-K562-INPUT_S1.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/MHC-ReChIP2-K562-SINGLE-H3K4me3_S2.sort.rmdup.bam alignment/MHC-ReChIP2-K562-INPUT_S1.sort.rmdup.bam
+sbatch scripts/macs2.sbatch alignment/MHC-ReChIP2-K562-ReChIP-with-clear-H3K4me3_S5.sort.rmdup.bam alignment/MHC-ReChIP2-K562-SINGLE-H3K27me3_S3.sort.rmdup.bam
+```
