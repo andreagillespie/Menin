@@ -1,0 +1,37 @@
+#!/bin/bash
+ 
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem-per-cpu=40G
+#SBATCH --time=0-01:00:00
+#SBATCH --output=logs/DTMatrix%j.stdout
+#SBATCH --mail-user=andrea.gillespie@petermac.org
+#SBATCH --mail-type=END,TIME_LIMIT_80
+#SBATCH --job-name="DTMatrix"
+#SBATCH --partition=prod_short
+
+module load deeptools/3.5.0
+
+#computeMatrix reference-point -S \
+#../ChIPseq_220303_NB501056_0768_AHMTHWBGXL/alignment/BW_RPGC_norm/MHC-CS22-K562-DMSO-MLL1_S1.RPGC.bw ../ChIPseq_220303_NB501056_0768_AHMTHWBGXL/alignment/BW_RPGC_norm/MHC-CS22-K562-VTP-MLL1_S2.RPGC.bw \
+#../ChIPseq_200320_NB501056_0470_AH5NJJBGXF/RPGCNormBW/Cas_S2.bw ../ChIPseq_200320_NB501056_0470_AH5NJJBGXF/RPGCNormBW/MENKO_S4.bw ../ChIPseq_200320_NB501056_0470_AH5NJJBGXF/RPGCNormBW/MENi_S3.bw \
+#../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/BW_RPGC_norm/MHC-CSCT03-K562-CAS-H3K4me3_S2.RPGC.bw ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/BW_RPGC_norm/MHC-CSCT03-K562-MEN1ko-H3K4me3_S3.RPGC.bw \
+#../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/BW_RPGC_norm/MHC-CSCT03-K562-CAS-H3K27me3_S6.RPGC.bw ../CUTandTAG_220201_NB501056_0753_AHLHYCBGXL/alignment/BW_RPGC_norm/MHC-CSCT03-K562-MEN1ko-H3K27me3_S7.RPGC.bw \
+#../ChIPseq_210422_NB501056_0625_AHGNFTBGXJ/RPGCNormBW/MHC-CS04-K562-3B-DUAL-SUZ12_S7.bw ../ChIPseq_210422_NB501056_0625_AHGNFTBGXJ/RPGCNormBW/MHC-CS04-K562-4B-DUAL-SUZ12_S8.bw \
+#-R reference_files/CSCR01_1RPM_MLL_UP_K4only.bed --referencePoint center -a 3000 -b 3000 -o All_Exp_DT_matrices/MENi_Exp_Cov_matrix_RPCGNorm_CSCR01_1RPM_MLL1_UP_K4only.gz
+
+
+plotHeatmap -m All_Exp_DT_matrices/MENi_Exp_Cov_matrix_RPCGNorm_CSCR01_1RPM_MLL1_UP_K4only.gz --sortUsing sum --sortUsingSamples 7 --boxAroundHeatmaps no --samplesLabel \
+DMSO-MLL1 VTP-MLL1 \
+CAS-Menin KO-Menin MENi-Menin \
+CAS-H3K4me3 KO-H3K4me3 \
+CAS-H3K27me3 KO-H3K27me3 \
+CAS-SUZ12 KO-SUZ12 \
+--zMin 0 0 0 0 0 0 0 0 0 0 0 \
+--zMax 20 20 20 20 20 130 130 3.8 3.8 15 15 \
+--yMin 0 0 0 0 0 0 0 0 0 0 0 \
+--yMax 8.5 8.5 8.5 8.5 8.5 60 60 20 20 10 10 \
+--colorMap Reds Reds Reds Reds Reds Blues Blues Oranges Oranges Greens Greens \
+--refPointLabel peak.center --regionsLabel "GAIN" \
+--heatmapHeight 8 --heatmapWidth 5 \
+-o plots/Heatmap_MENi_Exp_RPGCnorm_CSCR01_1RPM_MLL1_UP_K4only.pdf --plotTitle "Cut&Run CSCR01 MLL1 >1RPM (either), difference >1RPM"

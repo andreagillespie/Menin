@@ -1,0 +1,24 @@
+#!/bin/bash
+ 
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem-per-cpu=10G
+#SBATCH --time=0-2:00:00
+#SBATCH --output=../logs/MACS%j.stdout
+#SBATCH --mail-type=END
+#SBATCH --mail-user=andrea.gillespie@petermac.org
+#SBATCH --job-name="CnR_MACS"
+#SBATCH --partition=prod_short
+
+module load macs/2.1.1
+
+bname=`basename $1 .sort.bam`
+
+srun -n 1 macs2 callpeak -t $1 -c $2 --broad -g hs -n ${bname} -p 0.1 --outdir broadpeaks -B
+
+srun -n 1 macs2 callpeak -t $1 -c $2 -g hs -n ${bname} --outdir cnrt_broadpeaks --broad --broad-cutoff 0.1 -B --SPMR --keep-dup all 2> ../logs/${bname}.broad.all.frag.macs2
+
+
+
+
+
